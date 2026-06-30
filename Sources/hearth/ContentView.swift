@@ -1,6 +1,8 @@
 import SwiftUI
 
 struct ContentView: View {
+    @State private var status: EngineStatus = .noEngine
+
     var body: some View {
         ZStack {
             // warm cream wash behind everything
@@ -20,6 +22,13 @@ struct ContentView: View {
             }
             .padding(16)
         }
+        .onAppear { status = EngineManager.status() }
+    }
+
+    // is the engine present (regardless of bottle)?
+    private var engineReady: Bool {
+        if case .noEngine = status { return false }
+        return true
     }
 
     private var header: some View {
@@ -70,12 +79,14 @@ struct ContentView: View {
 
     private var statusBar: some View {
         HStack(spacing: 10) {
-            Circle().fill(Palette.coral).frame(width: 10, height: 10)
-            Text("engine: not set up yet")
+            Circle()
+                .fill(engineReady ? Palette.sage : Palette.coral)
+                .frame(width: 10, height: 10)
+            Text(status.headline)
                 .font(.system(size: 14, design: .monospaced))
                 .foregroundColor(Palette.ink)
             Spacer()
-            Text("phase 0 · cozy shell")
+            Text("phase 1 · engine")
                 .font(.system(size: 13, design: .monospaced))
                 .foregroundColor(Palette.inkSoft)
         }
