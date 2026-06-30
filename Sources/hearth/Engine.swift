@@ -134,6 +134,32 @@ enum EngineManager {
         ]
     }
 
+    // env for launching a game: route the direct3d dlls to wine's builtin
+    // versions, which are the gptk ones backed by d3dmetal, so directx lands
+    // on metal. hush the metal hud by default.
+    static func gameEnv(_ bottle: URL) -> [String: String] {
+        var e = bottleEnv(bottle)
+        e["WINEDLLOVERRIDES"] = "mscoree=d;mshtml=d;dxgi,d3d9,d3d10core,d3d11,d3d12,d3d12core=b"
+        e["MTL_HUD_ENABLED"] = "0"
+        return e
+    }
+
+    // launch a process without waiting (for long-running guis like the steam
+    // client or a game). returns the child pid.
+    @discardableResult
+    static func spawn(_ launch: String, _ args: [String], extraEnv: [String: String] = [:]) throws -> Int32 {
+        let p = Process()
+        p.executableURL = URL(fileURLWithPath: launch)
+        p.arguments = args
+        var env = ProcessInfo.processInfo.environment
+        for (k, v) in extraEnv { env[k] = v }
+        p.environment = env
+        p.standardOutput = FileHandle.nullDevice
+        p.standardError = FileHandle.nullDevice
+        try p.run()
+        return p.processIdentifier
+    }
+
     // create a fresh bottle by booting wine against a new prefix.
     static func createBottle(_ name: String = defaultBottle) throws {
         guard let engine = Engine.detect() else { throw HearthError.noEngine }
