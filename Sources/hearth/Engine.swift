@@ -23,14 +23,17 @@ enum HearthError: Error, CustomStringConvertible {
 }
 
 enum EnginePaths {
-    // gptk drops its wine wrapper into the x86-64 homebrew prefix. probe the
-    // usual spots in order; the first executable one wins.
+    // the gcenx game porting toolkit cask ships a prebuilt wine inside its
+    // app bundle. fall back to the homebrew prefixes if a raw wine is around.
+    // first executable path wins.
     static let candidateWine = [
+        "/Applications/Game Porting Toolkit.app/Contents/Resources/wine/bin/wine64",
         "/usr/local/bin/wine64",
         "/usr/local/bin/wine",
         "/opt/homebrew/bin/wine64",
         "/opt/homebrew/bin/wine",
     ]
+    // the wrapper that sets up d3dmetal and the prefix for a launch.
     static let candidateGptk = [
         "/usr/local/bin/gameportingtoolkit",
         "/opt/homebrew/bin/gameportingtoolkit",
@@ -119,12 +122,24 @@ enum EngineManager {
         )
     }
 
+    // environment for every wine call against a bottle: point at the prefix,
+    // hush the debug spew, and disable the mono/.net and gecko/ie installers
+    // so a headless boot never blocks on their popups (games rarely need them;
+    // we can add them per game later if something asks).
+    static func bottleEnv(_ bottle: URL) -> [String: String] {
+        [
+            "WINEPREFIX": bottle.path,
+            "WINEDEBUG": "-all",
+            "WINEDLLOVERRIDES": "mscoree=d;mshtml=d",
+        ]
+    }
+
     // create a fresh bottle by booting wine against a new prefix.
     static func createBottle(_ name: String = defaultBottle) throws {
         guard let engine = Engine.detect() else { throw HearthError.noEngine }
         let bottle = EnginePaths.bottle(name)
         try FileManager.default.createDirectory(at: bottle, withIntermediateDirectories: true)
-        let r = try run(engine.wine, ["wineboot", "--init"], extraEnv: ["WINEPREFIX": bottle.path])
+        let r = try run(engine.wine, ["wineboot", "--init"], extraEnv: bottleEnv(bottle))
         if r.code != 0 { throw HearthError.bottleInit(r.err.isEmpty ? "exit \(r.code)" : r.err) }
     }
 

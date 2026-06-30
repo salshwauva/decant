@@ -9,6 +9,20 @@ struct HearthApp: App {
             EngineManager.doctor()
             exit(0)
         }
+        // create the default bottle, then report. for testing the engine
+        // wiring from a terminal before the gui drives it.
+        if CommandLine.arguments.contains("--init-bottle") {
+            do {
+                print("hearth: creating bottle (first boot can take a minute)...")
+                try EngineManager.createBottle()
+                print("hearth: bottle ready")
+                EngineManager.doctor()
+            } catch {
+                print("hearth: \(error)")
+                exit(1)
+            }
+            exit(0)
+        }
     }
 
     var body: some Scene {
