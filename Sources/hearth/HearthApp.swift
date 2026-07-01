@@ -51,6 +51,16 @@ private func handleCLI() {
         }
     }
 
+    if args.contains("--gc") {
+        let bytes = Housekeeping.dumpBytes(bottle)
+        print("hearth: crash dumps \(Housekeeping.human(bytes)) (cap \(Housekeeping.human(Housekeeping.dumpCapBytes)))")
+        let freed = Housekeeping.trimDumps(bottle)
+        print(freed > 0
+            ? "hearth: over cap, cleared \(Housekeeping.human(freed))"
+            : "hearth: under cap, nothing to clear")
+        exit(0)
+    }
+
     if args.contains("--games") {
         let games = SteamManager.installedGames(bottle)
         if games.isEmpty { print("hearth: no games installed in the bottle yet") }

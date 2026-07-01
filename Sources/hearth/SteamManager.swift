@@ -44,6 +44,7 @@ enum SteamManager {
 
     // open the steam client so the user can sign in and install games.
     static func launchClient(_ bottle: URL, engine: Engine) throws {
+        clearDumpsIfBig(bottle)
         try EngineManager.spawn(engine.wine, [steamExe(bottle).path],
                                 extraEnv: EngineManager.bottleEnv(bottle))
     }
@@ -51,8 +52,19 @@ enum SteamManager {
     // launch an owned, installed game by app id, through steam, with the
     // direct3d-to-metal env in place.
     static func launchGame(appID: String, bottle: URL, engine: Engine) throws {
+        clearDumpsIfBig(bottle)
         try EngineManager.spawn(engine.wine, [steamExe(bottle).path, "-applaunch", appID],
                                 extraEnv: EngineManager.gameEnv(bottle))
+    }
+
+    // clear crash dumps before launching if they've grown past the cap, so a
+    // crash-loop can never fill the disk the way it did during bring-up.
+    private static func clearDumpsIfBig(_ bottle: URL) {
+        let freed = Housekeeping.trimDumps(bottle)
+        if freed > 0 {
+            FileHandle.standardError.write(
+                Data("hearth: cleared \(Housekeeping.human(freed)) of crash dumps\n".utf8))
+        }
     }
 
     // games installed in the bottle, read from steam's appmanifest files.
