@@ -1,13 +1,13 @@
 import SwiftUI
 
 @main
-struct HearthApp: App {
+struct MeadApp: App {
     init() {
         handleCLI()
     }
 
     var body: some Scene {
-        WindowGroup("hearth") {
+        WindowGroup("mead") {
             ContentView()
                 .frame(minWidth: 820, minHeight: 560)
         }
@@ -30,9 +30,9 @@ private func handleCLI() {
 
     if args.contains("--init-bottle") {
         runOrDie {
-            print("hearth: creating bottle (first boot can take a minute)...")
+            print("mead: creating bottle (first boot can take a minute)...")
             try EngineManager.createBottle()
-            print("hearth: bottle ready")
+            print("mead: bottle ready")
             EngineManager.doctor()
         }
     }
@@ -40,30 +40,30 @@ private func handleCLI() {
     if args.contains("--install-steam") {
         runOrDie {
             try SteamManager.installSteam(into: bottle, engine: try requireEngine())
-            print("hearth: steam installed")
+            print("mead: steam installed")
         }
     }
 
     if args.contains("--steam") {
         runOrDie {
             try SteamManager.launchClient(bottle, engine: try requireEngine())
-            print("hearth: launched steam client (sign in there)")
+            print("mead: launched steam client (sign in there)")
         }
     }
 
     if args.contains("--gc") {
         let bytes = Housekeeping.dumpBytes(bottle)
-        print("hearth: crash dumps \(Housekeeping.human(bytes)) (cap \(Housekeeping.human(Housekeeping.dumpCapBytes)))")
+        print("mead: crash dumps \(Housekeeping.human(bytes)) (cap \(Housekeeping.human(Housekeeping.dumpCapBytes)))")
         let freed = Housekeeping.trimDumps(bottle)
         print(freed > 0
-            ? "hearth: over cap, cleared \(Housekeeping.human(freed))"
-            : "hearth: under cap, nothing to clear")
+            ? "mead: over cap, cleared \(Housekeeping.human(freed))"
+            : "mead: under cap, nothing to clear")
         exit(0)
     }
 
     if args.contains("--games") {
         let games = SteamManager.installedGames(bottle)
-        if games.isEmpty { print("hearth: no games installed in the bottle yet") }
+        if games.isEmpty { print("mead: no games installed in the bottle yet") }
         for g in games { print("  \(g.appID)\t\(g.name)") }
         exit(0)
     }
@@ -72,19 +72,19 @@ private func handleCLI() {
         let appid = args[i + 1]
         runOrDie {
             try SteamManager.launchGame(appID: appid, bottle: bottle, engine: try requireEngine())
-            print("hearth: launching app \(appid)")
+            print("mead: launching app \(appid)")
         }
     }
 }
 
 private func requireEngine() throws -> Engine {
-    guard let e = Engine.detect() else { throw HearthError.noEngine }
+    guard let e = Engine.detect() else { throw MeadError.noEngine }
     return e
 }
 
 private func runOrDie(_ body: () throws -> Void) -> Never {
     do { try body() } catch {
-        print("hearth: \(error)")
+        print("mead: \(error)")
         exit(1)
     }
     exit(0)

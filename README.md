@@ -1,21 +1,21 @@
-# hearth
+# mead
 
 a cozy launcher for windows-only steam games on apple silicon. it installs
 and launches the games you already own, wrapped in a warm pixel ui.
 
-hearth does not emulate anything. the hard work (running x86-64, the windows
+mead does not emulate anything. the hard work (running x86-64, the windows
 api, directx) is done by tools that already exist:
 
 - rosetta 2 translates the x86-64 instructions (built into macos)
 - wine provides the windows api and loads the program
 - apple's game porting toolkit (d3dmetal) turns directx into metal
 
-hearth drives that stack: it sets up a bottle, installs windows steam into
+mead drives that stack: it sets up a bottle, installs windows steam into
 it, finds the games you own, and launches them. think of it as your own
 cozy front end over the same engine whisky and crossover use.
 
 this is the opposite end from wisp. wisp emulates a cpu from scratch to run a
-toy program. hearth leans on mature engines to run real games. different
+toy program. mead leans on mature engines to run real games. different
 goals, same household.
 
 ## scope and honesty
@@ -31,8 +31,8 @@ first target: fields of mistria. cozy, 2d, single player, no anti cheat.
 
 needs the swift toolchain from the command line tools. no full xcode project.
 
-    ./scripts/bundle.sh        # builds build/hearth.app
-    open build/hearth.app
+    ./scripts/bundle.sh        # builds build/mead.app
+    open build/mead.app
 
 ## roadmap
 

@@ -7,10 +7,10 @@ import Foundation
 // crash fallout, steam recreates the folder on demand, so deleting is safe.
 enum Housekeeping {
     // clear dumps once their total crosses this. 10 GiB by default (the size
-    // that prompted this guard); override with HEARTH_DUMP_CAP_GB.
+    // that prompted this guard); override with MEAD_DUMP_CAP_GB.
     static var dumpCapBytes: UInt64 {
         let gib: UInt64 = 1024 * 1024 * 1024
-        if let s = ProcessInfo.processInfo.environment["HEARTH_DUMP_CAP_GB"],
+        if let s = ProcessInfo.processInfo.environment["MEAD_DUMP_CAP_GB"],
            let g = Double(s), g > 0 {
             return UInt64(g * Double(gib))
         }

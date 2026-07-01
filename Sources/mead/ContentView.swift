@@ -43,7 +43,7 @@ struct ContentView: View {
     private var header: some View {
         HStack(alignment: .center) {
             HStack(alignment: .firstTextBaseline, spacing: 10) {
-                Text("✿ hearth")
+                Text("✿ mead")
                     .font(.system(size: 26, weight: .bold, design: .rounded))
                     .foregroundColor(Color(hex: 0xfff6e6))
                     .shadow(color: Palette.woodDk.opacity(0.6), radius: 0, y: 2)

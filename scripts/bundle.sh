@@ -1,5 +1,5 @@
 #!/bin/sh
-# build hearth and assemble a launchable .app bundle. no xcode project, just
+# build mead and assemble a launchable .app bundle. no xcode project, just
 # swiftpm plus a hand-written Info.plist, so it builds against the command
 # line tools sdk.
 set -e
@@ -7,22 +7,22 @@ cd "$(dirname "$0")/.."
 
 CONF=${1:-release}
 swift build -c "$CONF"
-BIN="$(swift build -c "$CONF" --show-bin-path)/hearth"
+BIN="$(swift build -c "$CONF" --show-bin-path)/mead"
 
-APP="build/hearth.app"
+APP="build/mead.app"
 rm -rf "$APP"
 mkdir -p "$APP/Contents/MacOS" "$APP/Contents/Resources"
-cp "$BIN" "$APP/Contents/MacOS/hearth"
+cp "$BIN" "$APP/Contents/MacOS/mead"
 
 cat > "$APP/Contents/Info.plist" <<'PLIST'
 <?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0">
 <dict>
-  <key>CFBundleName</key><string>hearth</string>
-  <key>CFBundleDisplayName</key><string>hearth</string>
-  <key>CFBundleIdentifier</key><string>com.sophia.hearth</string>
-  <key>CFBundleExecutable</key><string>hearth</string>
+  <key>CFBundleName</key><string>mead</string>
+  <key>CFBundleDisplayName</key><string>mead</string>
+  <key>CFBundleIdentifier</key><string>com.sophia.mead</string>
+  <key>CFBundleExecutable</key><string>mead</string>
   <key>CFBundlePackageType</key><string>APPL</string>
   <key>CFBundleVersion</key><string>0.0.0</string>
   <key>CFBundleShortVersionString</key><string>0.0</string>

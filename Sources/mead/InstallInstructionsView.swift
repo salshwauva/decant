@@ -8,15 +8,15 @@ struct InstallInstructionsView: View {
 
     private let steps: [(String, String, String)] = [
         ("1", "open steam",
-         "hit \u{201c}open steam\u{201d}. a windows steam window opens inside hearth. the first time, sign in with your steam account (it remembers you after)."),
+         "hit \u{201c}open steam\u{201d}. a windows steam window opens inside mead. the first time, sign in with your steam account (it remembers you after)."),
         ("2", "find your game",
          "in steam, go to your library and pick a windows game you own. cozy single-player games work great."),
         ("3", "install it",
-         "click install and let it download. it lands in hearth's bottle, fully separate from your mac steam."),
+         "click install and let it download. it lands in mead's bottle, fully separate from your mac steam."),
         ("4", "refresh the shelf",
-         "come back to hearth and hit \u{201c}refresh\u{201d}. the game appears on your shelf."),
+         "come back to mead and hit \u{201c}refresh\u{201d}. the game appears on your shelf."),
         ("5", "play",
-         "click play on the game's card. hearth launches it through wine 11 + dxmt, straight to metal on your mac."),
+         "click play on the game's card. mead launches it through wine 11 + dxmt, straight to metal on your mac."),
     ]
 
     var body: some View {
@@ -85,7 +85,7 @@ struct InstallInstructionsView: View {
             Text("good to know")
                 .font(.system(size: 15, weight: .semibold, design: .rounded))
                 .foregroundColor(Palette.sageDk)
-            Text("single-player and many online games run well. games with kernel-level anti-cheat (a lot of competitive multiplayer) don't run on macos in any wrapper, that's a mac limitation, not hearth's.")
+            Text("single-player and many online games run well. games with kernel-level anti-cheat (a lot of competitive multiplayer) don't run on macos in any wrapper, that's a mac limitation, not mead's.")
                 .font(.system(size: 14, design: .monospaced))
                 .foregroundColor(Palette.inkSoft)
                 .fixedSize(horizontal: false, vertical: true)

@@ -1,6 +1,6 @@
 import SwiftUI
 
-// the cozy pixel palette, carried over from the wisp ui so hearth feels like
+// the cozy pixel palette, carried over from the wisp ui so mead feels like
 // the same world: warm cream, wood, peach, sage.
 enum Palette {
     static let cream    = Color(hex: 0xf6e7c8)
