@@ -42,19 +42,23 @@ enum SteamManager {
         }
     }
 
+    // the launch wrapper that bakes in the working wine 11 + dxmt env,
+    // the webhelper wrapper, the flag set, and the virtual desktop.
+    static var launchScript: URL {
+        EnginePaths.support.appendingPathComponent("engine/hearth-launch.sh")
+    }
+
     // open the steam client so the user can sign in and install games.
     static func launchClient(_ bottle: URL, engine: Engine) throws {
         clearDumpsIfBig(bottle)
-        try EngineManager.spawn(engine.wine, [steamExe(bottle).path],
-                                extraEnv: EngineManager.bottleEnv(bottle))
+        try EngineManager.spawn("/bin/bash", [launchScript.path, "steam"])
     }
 
     // launch an owned, installed game by app id, through steam, with the
     // direct3d-to-metal env in place.
     static func launchGame(appID: String, bottle: URL, engine: Engine) throws {
         clearDumpsIfBig(bottle)
-        try EngineManager.spawn(engine.wine, [steamExe(bottle).path, "-applaunch", appID],
-                                extraEnv: EngineManager.gameEnv(bottle))
+        try EngineManager.spawn("/bin/bash", [launchScript.path, "play", appID])
     }
 
     // clear crash dumps before launching if they've grown past the cap, so a
@@ -84,13 +88,27 @@ enum SteamManager {
                 guard let txt = try? String(contentsOf: f, encoding: .utf8),
                       let appid = vdfValue(txt, "appid"),
                       let name = vdfValue(txt, "name"),
-                      !seen.contains(appid)
+                      !seen.contains(appid),
+                      !isSupportPackage(appID: appid, name: name)
                 else { continue }
                 seen.insert(appid)
                 games.append(Game(appID: appid, name: name))
             }
         }
         return games.sorted { $0.name.lowercased() < $1.name.lowercased() }
+    }
+
+    // steam ships shared runtimes/redistributables as "apps" in steamapps;
+    // they aren't games and shouldn't land on the shelf.
+    private static func isSupportPackage(appID: String, name: String) -> Bool {
+        let junkIDs: Set<String> = ["228980", "1070560", "1391110", "1628350"]
+        if junkIDs.contains(appID) { return true }
+        let n = name.lowercased()
+        for needle in ["redistributable", "steamworks common", "steam linux runtime",
+                       "proton", "directx", "vcredist"] {
+            if n.contains(needle) { return true }
+        }
+        return false
     }
 
     // additional steam library folders declared in libraryfolders.vdf, mapped

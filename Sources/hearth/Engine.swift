@@ -23,13 +23,13 @@ enum HearthError: Error, CustomStringConvertible {
 }
 
 enum EnginePaths {
-    // the gcenx game porting toolkit cask ships a prebuilt wine inside its
-    // app bundle. fall back to the homebrew prefixes if a raw wine is around.
-    // first executable path wins.
+    // the working engine is our patched wine 11 (rebuilt winemac.so + dxmt
+    // fork) inside a writable app copy. probe it first, then older fallbacks.
     static let candidateWine = [
+        support.appendingPathComponent(
+            "engines/wine11/Wine Stable.app/Contents/Resources/wine/bin/wine"
+        ).path,
         "/Applications/Game Porting Toolkit.app/Contents/Resources/wine/bin/wine64",
-        "/usr/local/bin/wine64",
-        "/usr/local/bin/wine",
         "/opt/homebrew/bin/wine64",
         "/opt/homebrew/bin/wine",
     ]
@@ -85,7 +85,7 @@ struct RunResult {
 }
 
 enum EngineManager {
-    static let defaultBottle = "default"
+    static let defaultBottle = "steam11"
 
     static func status(bottle name: String = defaultBottle) -> EngineStatus {
         guard let engine = Engine.detect() else { return .noEngine }
