@@ -172,17 +172,35 @@ private struct GameCard: View {
         String(game.name.trimmingCharacters(in: .whitespaces).prefix(1)).uppercased()
     }
 
+    // steam's public store banner for the app (every game has one).
+    private var coverURL: URL? {
+        URL(string: "https://cdn.cloudflare.steamstatic.com/steam/apps/\(game.appID)/header.jpg")
+    }
+
+    private var placeholder: some View {
+        ZStack {
+            LinearGradient(colors: [Palette.peach, Palette.coral],
+                           startPoint: .topLeading, endPoint: .bottomTrailing)
+            Text(initial)
+                .font(.system(size: 40, weight: .bold, design: .rounded))
+                .foregroundColor(Color(hex: 0xfff6e6))
+        }
+    }
+
     var body: some View {
         VStack(spacing: 10) {
-            ZStack {
-                RoundedRectangle(cornerRadius: 10)
-                    .fill(LinearGradient(colors: [Palette.peach, Palette.coral],
-                                         startPoint: .topLeading, endPoint: .bottomTrailing))
-                    .frame(height: 92)
-                Text(initial)
-                    .font(.system(size: 40, weight: .bold, design: .rounded))
-                    .foregroundColor(Color(hex: 0xfff6e6))
+            AsyncImage(url: coverURL) { phase in
+                if case .success(let image) = phase {
+                    image.resizable().aspectRatio(contentMode: .fill)
+                } else {
+                    placeholder
+                }
             }
+            .frame(height: 96)
+            .frame(maxWidth: .infinity)
+            .clipShape(RoundedRectangle(cornerRadius: 10))
+            .overlay(RoundedRectangle(cornerRadius: 10).stroke(Palette.line, lineWidth: 1.5))
+
             Text(game.name)
                 .font(.system(size: 16, weight: .semibold, design: .rounded))
                 .foregroundColor(Palette.ink)
