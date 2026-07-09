@@ -70,6 +70,13 @@ private func handleCLI() {
         exit(0)
     }
 
+    if args.contains("--theme-icons") {
+        let games = SteamManager.installedGames(bottle)
+        DesktopShortcuts.retheme(games)
+        print("mead: re-themed desktop icons for \(games.count) game\(games.count == 1 ? "" : "s")")
+        exit(0)
+    }
+
     if let i = args.firstIndex(of: "--play"), i + 1 < args.count {
         let appid = args[i + 1]
         runOrDie {
