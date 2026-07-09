@@ -1,0 +1,6 @@
+Pixelify Sans, by Ben Kiel / Eduardo Nunes, distributed by Google Fonts
+(https://fonts.google.com/specimen/Pixelify+Sans), licensed under the SIL
+Open Font License, Version 1.1: https://openfontlicense.org
+
+Fetched from Google's font-serving CDN (fonts.gstatic.com) for embedding
+in this app bundle.

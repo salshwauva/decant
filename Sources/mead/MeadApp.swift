@@ -1,9 +1,11 @@
 import SwiftUI
+import CoreText
 
 @main
 struct MeadApp: App {
     init() {
         handleCLI()
+        registerBundledFonts()
     }
 
     var body: some Scene {
@@ -74,6 +76,20 @@ private func handleCLI() {
             try SteamManager.launchGame(appID: appid, bottle: bottle, engine: try requireEngine())
             print("mead: launching app \(appid)")
         }
+    }
+}
+
+// register the bundled Pixelify Sans weights so `.font(.custom(...))` can
+// find them by PostScript name. SwiftPM app bundles have no Xcode "Fonts"
+// build phase to do this automatically, so it's done by hand, once, before
+// any view that uses the font renders.
+private func registerBundledFonts() {
+    guard let fontsDir = Bundle.main.resourceURL?.appendingPathComponent("Fonts") else { return }
+    let names = ["PixelifySans-Regular", "PixelifySans-Medium", "PixelifySans-Bold"]
+    for name in names {
+        let url = fontsDir.appendingPathComponent("\(name).ttf")
+        guard FileManager.default.fileExists(atPath: url.path) else { continue }
+        CTFontManagerRegisterFontsForURL(url as CFURL, .process, nil)
     }
 }
 

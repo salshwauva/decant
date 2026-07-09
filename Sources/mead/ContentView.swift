@@ -24,7 +24,9 @@ struct ContentView: View {
 
     var body: some View {
         ZStack {
-            Palette.bgOuter.ignoresSafeArea()
+            LinearGradient(colors: [Palette.bgOuter, Palette.bgOuterDeep],
+                           startPoint: .top, endPoint: .bottom)
+                .ignoresSafeArea()
 
             VStack(spacing: 12) {
                 header
@@ -65,18 +67,20 @@ struct ContentView: View {
                 HStack(spacing: 8) {
                     Text("♥").foregroundColor(Palette.heart).font(.system(size: 14))
                     Text("MEAD")
-                        .font(.system(size: 24, weight: .heavy, design: .rounded))
-                        .tracking(3)
+                        .font(PixelFont.bold(26))
+                        .tracking(4)
                         .foregroundColor(Palette.textCream)
+                        .shadow(color: Palette.heart.opacity(0.5), radius: 6)
                     Text("♥").foregroundColor(Palette.heart).font(.system(size: 14))
                 }
                 Spacer()
                 Text("apple silicon")
-                    .font(.system(size: 12, weight: .semibold, design: .monospaced))
+                    .font(PixelFont.medium(12))
                     .foregroundColor(Palette.plaqueDk)
-                    .padding(.horizontal, 10).padding(.vertical, 3)
+                    .padding(.horizontal, 10).padding(.vertical, 4)
                     .background(Palette.gold)
                     .clipShape(Capsule())
+                    .overlay(Capsule().stroke(Palette.goldDk, lineWidth: 1.5))
             }
             .padding(.horizontal, 16)
             .padding(.vertical, 12)
@@ -99,21 +103,27 @@ struct ContentView: View {
     // MARK: shelf
 
     @ViewBuilder private var shelf: some View {
-        if games.isEmpty {
-            emptyShelf
-        } else {
-            ScrollView {
-                LazyVGrid(columns: [GridItem(.adaptive(minimum: 150), spacing: 12)], spacing: 12) {
-                    ForEach(games) { game in
-                        ItemSlot(game: game, isLaunching: launching == game.appID) {
-                            selectedGame = game
+        // the outer window margin is too thin to show floating accents, so
+        // they live here instead, behind the shelf's own open pink space
+        // where there's actually room for them to be seen.
+        ZStack {
+            FloatingAccents()
+            if games.isEmpty {
+                emptyShelf
+            } else {
+                ScrollView {
+                    LazyVGrid(columns: [GridItem(.adaptive(minimum: 150), spacing: 12)], spacing: 12) {
+                        ForEach(games) { game in
+                            ItemSlot(game: game, isLaunching: launching == game.appID) {
+                                selectedGame = game
+                            }
+                        }
+                        ForEach(0..<emptySlotCount, id: \.self) { _ in
+                            EmptyItemSlot()
                         }
                     }
-                    ForEach(0..<emptySlotCount, id: \.self) { _ in
-                        EmptyItemSlot()
-                    }
+                    .padding(14)
                 }
-                .padding(14)
             }
         }
     }
@@ -123,7 +133,7 @@ struct ContentView: View {
             Spacer()
             Text("🪴").font(.system(size: 52))
             Text("no games on the shelf yet")
-                .font(.system(size: 20, weight: .bold, design: .rounded))
+                .font(PixelFont.bold(20))
                 .foregroundColor(Palette.ink)
             Text("open steam, install a windows game, then hit refresh.\ntap \u{201c}how to install games\u{201d} for the steps.")
                 .multilineTextAlignment(.center)
@@ -142,6 +152,7 @@ struct ContentView: View {
             Circle()
                 .fill(engineReady ? Palette.playGreen : Palette.closeRed)
                 .frame(width: 10, height: 10)
+                .shadow(color: (engineReady ? Palette.playGreen : Palette.closeRed).opacity(0.7), radius: 4)
             Text(engineReady ? "engine: ready · wine 11 + dxmt" : status.headline)
                 .font(.system(size: 13, weight: .medium, design: .monospaced))
                 .foregroundColor(Palette.textCream)
@@ -156,6 +167,7 @@ struct ContentView: View {
         )
         .clipShape(RoundedRectangle(cornerRadius: 12))
         .overlay(RoundedRectangle(cornerRadius: 12).stroke(Palette.gold, lineWidth: 2.5))
+        .shadow(color: Palette.plaqueDk.opacity(0.3), radius: 4, x: 0, y: 2)
     }
 
     // MARK: actions
@@ -187,6 +199,7 @@ private struct ItemSlot: View {
     let game: Game
     let isLaunching: Bool
     let onTap: () -> Void
+    @State private var hovering = false
 
     private var initial: String {
         String(game.name.trimmingCharacters(in: .whitespaces).prefix(1)).uppercased()
@@ -210,21 +223,32 @@ private struct ItemSlot: View {
     var body: some View {
         Button(action: onTap) {
             VStack(spacing: 8) {
-                AsyncImage(url: coverURL) { phase in
-                    if case .success(let image) = phase {
-                        image.resizable().aspectRatio(contentMode: .fill)
-                    } else {
-                        placeholder
+                ZStack(alignment: .topTrailing) {
+                    AsyncImage(url: coverURL) { phase in
+                        if case .success(let image) = phase {
+                            image.resizable().aspectRatio(contentMode: .fill)
+                        } else {
+                            placeholder
+                        }
                     }
+                    .frame(height: 78)
+                    .frame(maxWidth: .infinity)
+                    .clipShape(RoundedRectangle(cornerRadius: 7))
+                    .overlay(RoundedRectangle(cornerRadius: 7).stroke(Palette.gold, lineWidth: 1.5))
+                    .opacity(isLaunching ? 0.5 : 1)
+
+                    // a little sparkle badge, echoing the reference's habit
+                    // of dotting hearts on the label itself, not just
+                    // around the item.
+                    Text("✦")
+                        .font(.system(size: 11))
+                        .foregroundColor(Palette.goldBright)
+                        .shadow(color: Palette.plaqueDk.opacity(0.6), radius: 1)
+                        .padding(4)
                 }
-                .frame(height: 78)
-                .frame(maxWidth: .infinity)
-                .clipShape(RoundedRectangle(cornerRadius: 7))
-                .overlay(RoundedRectangle(cornerRadius: 7).stroke(Palette.gold, lineWidth: 1.5))
-                .opacity(isLaunching ? 0.5 : 1)
 
                 Text(isLaunching ? "starting…" : game.name)
-                    .font(.system(size: 12.5, weight: .semibold, design: .rounded))
+                    .font(PixelFont.medium(13))
                     .foregroundColor(Palette.textCream)
                     .lineLimit(1)
                     .frame(maxWidth: .infinity)
@@ -234,10 +258,29 @@ private struct ItemSlot: View {
                 LinearGradient(colors: [Palette.slot, Palette.slotDk], startPoint: .top, endPoint: .bottom)
             )
             .clipShape(RoundedRectangle(cornerRadius: 11))
-            .overlay(RoundedRectangle(cornerRadius: 11).stroke(Palette.gold, lineWidth: 2))
+            .overlay(
+                RoundedRectangle(cornerRadius: 11)
+                    .stroke(hovering ? Palette.goldBright : Palette.gold, lineWidth: hovering ? 2.5 : 2)
+            )
+            .shadow(color: Palette.goldBright.opacity(hovering ? 0.55 : 0), radius: hovering ? 8 : 0)
         }
-        .buttonStyle(.plain)
+        .buttonStyle(PressableStyle())
+        .scaleEffect(hovering ? 1.04 : 1.0)
+        .animation(.easeOut(duration: 0.14), value: hovering)
+        .onHover { hovering = $0 }
         .disabled(isLaunching)
+    }
+}
+
+// a button style that just scales/darkens on press, for views (like item
+// slots) that already carry their own background/border chrome and only
+// need the press feedback, not PixelButtonStyle's full chunky-button look.
+private struct PressableStyle: ButtonStyle {
+    func makeBody(configuration: Configuration) -> some View {
+        configuration.label
+            .scaleEffect(configuration.isPressed ? 0.95 : 1.0)
+            .brightness(configuration.isPressed ? -0.06 : 0)
+            .animation(.easeOut(duration: 0.08), value: configuration.isPressed)
     }
 }
 
@@ -251,6 +294,11 @@ private struct EmptyItemSlot: View {
                 RoundedRectangle(cornerRadius: 11)
                     .strokeBorder(style: StrokeStyle(lineWidth: 2, dash: [5, 4]))
                     .foregroundColor(Palette.goldDk.opacity(0.6))
+            )
+            .overlay(
+                Text("♡")
+                    .font(.system(size: 22))
+                    .foregroundColor(Palette.heartDk.opacity(0.3))
             )
             .aspectRatio(1, contentMode: .fit)
     }

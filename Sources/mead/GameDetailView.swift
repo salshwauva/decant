@@ -17,12 +17,14 @@ struct GameDetailView: View {
 
     var body: some View {
         ZStack {
-            Palette.bgOuter.ignoresSafeArea()
+            LinearGradient(colors: [Palette.bgOuter, Palette.bgOuterDeep],
+                           startPoint: .top, endPoint: .bottom)
+                .ignoresSafeArea()
 
             VStack(spacing: 14) {
                 Plaque {
                     Text(game.name.uppercased())
-                        .font(.system(size: 18, weight: .heavy, design: .rounded))
+                        .font(PixelFont.bold(19))
                         .tracking(2)
                         .foregroundColor(Palette.textCream)
                         .multilineTextAlignment(.center)
@@ -64,6 +66,11 @@ struct GameDetailView: View {
         ZStack {
             RoundedRectangle(cornerRadius: 14).fill(Palette.bgPanelDeep)
 
+            // the animated hearts/sparkles layer, letterboxed around
+            // whatever the cover image doesn't fill -- there's real open
+            // space here, unlike the window's thin outer margin.
+            FloatingAccents()
+
             AsyncImage(url: coverURL) { phase in
                 if case .success(let image) = phase {
                     image.resizable().aspectRatio(contentMode: .fit).padding(14)
@@ -94,5 +101,6 @@ struct GameDetailView: View {
         }
         .frame(height: 200)
         .overlay(RoundedRectangle(cornerRadius: 14).stroke(Palette.gold, lineWidth: 2.5))
+        .shadow(color: Palette.goldBright.opacity(0.35), radius: 10, x: 0, y: 4)
     }
 }

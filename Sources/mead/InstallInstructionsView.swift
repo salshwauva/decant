@@ -21,13 +21,17 @@ struct InstallInstructionsView: View {
 
     var body: some View {
         ZStack {
-            Palette.bgOuter.ignoresSafeArea()
+            LinearGradient(colors: [Palette.bgOuter, Palette.bgOuterDeep],
+                           startPoint: .top, endPoint: .bottom)
+                .ignoresSafeArea()
+            FloatingAccents()
 
             VStack(spacing: 12) {
                 Plaque {
                     HStack {
                         Text("\u{2661} how to install games")
-                            .font(.system(size: 18, weight: .heavy, design: .rounded))
+                            .font(PixelFont.bold(18))
+                            .tracking(1)
                             .foregroundColor(Palette.textCream)
                         Spacer()
                         CozyButton(label: "done", tint: Palette.neutral, tintDown: Palette.neutralDk) { dismiss() }
@@ -61,13 +65,15 @@ struct InstallInstructionsView: View {
     private func stepCard(number: String, title: String, body: String) -> some View {
         HStack(alignment: .top, spacing: 12) {
             Text(number)
-                .font(.system(size: 20, weight: .bold, design: .rounded))
+                .font(PixelFont.bold(20))
                 .foregroundColor(Palette.textCream)
                 .frame(width: 38, height: 38)
                 .background(Circle().fill(Palette.heart))
+                .overlay(Circle().stroke(Palette.goldBright, lineWidth: 1.5))
+                .shadow(color: Palette.heart.opacity(0.4), radius: 3)
             VStack(alignment: .leading, spacing: 3) {
                 Text(title)
-                    .font(.system(size: 17, weight: .semibold, design: .rounded))
+                    .font(PixelFont.medium(16))
                     .foregroundColor(Palette.ink)
                 Text(body)
                     .font(.system(size: 14, design: .monospaced))
@@ -77,15 +83,18 @@ struct InstallInstructionsView: View {
             Spacer(minLength: 0)
         }
         .padding(12)
-        .background(Palette.bgPanel)
+        .background(
+            LinearGradient(colors: [Palette.bgPanel, Palette.bgPanelDeep], startPoint: .top, endPoint: .bottom)
+        )
         .clipShape(RoundedRectangle(cornerRadius: 12))
         .overlay(RoundedRectangle(cornerRadius: 12).stroke(Palette.gold, lineWidth: 2))
+        .shadow(color: Palette.plaqueDk.opacity(0.15), radius: 3, x: 0, y: 2)
     }
 
     private var noteCard: some View {
         VStack(alignment: .leading, spacing: 4) {
             Text("good to know")
-                .font(.system(size: 15, weight: .bold, design: .rounded))
+                .font(PixelFont.bold(15))
                 .foregroundColor(Palette.textCream)
             Text("single-player and many online games run well. games with kernel-level anti-cheat (a lot of competitive multiplayer) don't run on macos in any wrapper, that's a mac limitation, not mead's.")
                 .font(.system(size: 14, design: .monospaced))
