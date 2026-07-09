@@ -16,24 +16,25 @@ struct InstallInstructionsView: View {
         ("4", "refresh the shelf",
          "come back to mead and hit \u{201c}refresh\u{201d}. the game appears on your shelf."),
         ("5", "play",
-         "click play on the game's card. mead launches it through wine 11 + dxmt, straight to metal on your mac."),
+         "tap a game's slot, then hit play. mead launches it through wine 11 + dxmt, straight to metal on your mac."),
     ]
 
     var body: some View {
         ZStack {
-            LinearGradient(
-                colors: [Color(hex: 0xfff4dd), Palette.cream, Palette.cream2],
-                startPoint: .top, endPoint: .bottom
-            )
-            .ignoresSafeArea()
+            Palette.bgOuter.ignoresSafeArea()
 
             VStack(spacing: 12) {
-                HStack {
-                    Text("＋ how to install games")
-                        .font(.system(size: 22, weight: .bold, design: .rounded))
-                        .foregroundColor(Palette.ink)
-                    Spacer()
-                    CozyButton(label: "done", tint: Palette.panel2) { dismiss() }
+                Plaque {
+                    HStack {
+                        Text("\u{2661} how to install games")
+                            .font(.system(size: 18, weight: .heavy, design: .rounded))
+                            .foregroundColor(Palette.textCream)
+                        Spacer()
+                        CozyButton(label: "done", tint: Palette.neutral, tintDown: Palette.neutralDk) { dismiss() }
+                            .fixedSize()
+                    }
+                    .padding(.horizontal, 16)
+                    .padding(.vertical, 10)
                 }
 
                 ScrollView {
@@ -46,7 +47,7 @@ struct InstallInstructionsView: View {
                     .padding(.vertical, 4)
                 }
 
-                CozyButton(label: "▶  open steam now", tint: Palette.sage) {
+                CozyButton(label: "\u{25b6}  open steam now", tint: Palette.playGreen, tintDown: Palette.playGreenDk) {
                     onOpenSteam()
                     dismiss()
                 }
@@ -54,15 +55,16 @@ struct InstallInstructionsView: View {
             .padding(18)
             .frame(minWidth: 460, minHeight: 520)
         }
+        .ornateFrame(corner: 18, heartCorners: true)
     }
 
     private func stepCard(number: String, title: String, body: String) -> some View {
         HStack(alignment: .top, spacing: 12) {
             Text(number)
                 .font(.system(size: 20, weight: .bold, design: .rounded))
-                .foregroundColor(Color(hex: 0xfff6e6))
+                .foregroundColor(Palette.textCream)
                 .frame(width: 38, height: 38)
-                .background(Circle().fill(Palette.coral))
+                .background(Circle().fill(Palette.heart))
             VStack(alignment: .leading, spacing: 3) {
                 Text(title)
                     .font(.system(size: 17, weight: .semibold, design: .rounded))
@@ -75,25 +77,27 @@ struct InstallInstructionsView: View {
             Spacer(minLength: 0)
         }
         .padding(12)
-        .background(Palette.panel)
+        .background(Palette.bgPanel)
         .clipShape(RoundedRectangle(cornerRadius: 12))
-        .overlay(RoundedRectangle(cornerRadius: 12).stroke(Palette.line, lineWidth: 2))
+        .overlay(RoundedRectangle(cornerRadius: 12).stroke(Palette.gold, lineWidth: 2))
     }
 
     private var noteCard: some View {
         VStack(alignment: .leading, spacing: 4) {
             Text("good to know")
-                .font(.system(size: 15, weight: .semibold, design: .rounded))
-                .foregroundColor(Palette.sageDk)
+                .font(.system(size: 15, weight: .bold, design: .rounded))
+                .foregroundColor(Palette.textCream)
             Text("single-player and many online games run well. games with kernel-level anti-cheat (a lot of competitive multiplayer) don't run on macos in any wrapper, that's a mac limitation, not mead's.")
                 .font(.system(size: 14, design: .monospaced))
-                .foregroundColor(Palette.inkSoft)
+                .foregroundColor(Palette.textCream.opacity(0.85))
                 .fixedSize(horizontal: false, vertical: true)
         }
         .padding(12)
         .frame(maxWidth: .infinity, alignment: .leading)
-        .background(Color(hex: 0xe8f0d8))
+        .background(
+            LinearGradient(colors: [Palette.plaque, Palette.plaqueDk], startPoint: .top, endPoint: .bottom)
+        )
         .clipShape(RoundedRectangle(cornerRadius: 12))
-        .overlay(RoundedRectangle(cornerRadius: 12).stroke(Palette.sageDk, lineWidth: 2))
+        .overlay(RoundedRectangle(cornerRadius: 12).stroke(Palette.gold, lineWidth: 2))
     }
 }

@@ -5,21 +5,31 @@ struct ContentView: View {
     @State private var games: [Game] = []
     @State private var showingInstructions = false
     @State private var launching: String? = nil
+    @State private var selectedGame: Game? = nil
 
     private var bottle: URL { EnginePaths.bottle(EngineManager.defaultBottle) }
 
+    // pad the shelf out with a few empty gold-bordered slots, the same way
+    // the reference inventory screen shows open slots alongside filled
+    // ones -- a visual hint that there's room for more, not just decoration
+    // for its own sake. capped so a big library doesn't produce a wall of
+    // empty boxes.
+    private var emptySlotCount: Int {
+        guard !games.isEmpty else { return 0 }
+        let columns = 4
+        let remainder = games.count % columns
+        let fillRow = remainder == 0 ? 0 : columns - remainder
+        return min(fillRow + columns, 8)
+    }
+
     var body: some View {
         ZStack {
-            LinearGradient(
-                colors: [Color(hex: 0xfff4dd), Palette.cream, Palette.cream2],
-                startPoint: .top, endPoint: .bottom
-            )
-            .ignoresSafeArea()
+            Palette.bgOuter.ignoresSafeArea()
 
             VStack(spacing: 12) {
                 header
                 toolbar
-                CozyPanel(title: "✿  your shelf") {
+                CozyPanel(title: "✿  Y O U R   G A M E S  ✿") {
                     shelf
                 }
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
@@ -27,9 +37,18 @@ struct ContentView: View {
             }
             .padding(16)
         }
+        .ornateFrame(corner: 16, heartCorners: true)
         .onAppear(perform: refresh)
         .sheet(isPresented: $showingInstructions) {
             InstallInstructionsView(onOpenSteam: openSteam)
+        }
+        .sheet(item: $selectedGame) { game in
+            GameDetailView(
+                game: game,
+                isLaunching: launching == game.appID,
+                onPlay: { play(game) },
+                onClose: { selectedGame = nil }
+            )
         }
     }
 
@@ -38,46 +57,42 @@ struct ContentView: View {
         return true
     }
 
-    // MARK: header
+    // MARK: header — the plaque title banner
 
     private var header: some View {
-        HStack(alignment: .center) {
-            HStack(alignment: .firstTextBaseline, spacing: 10) {
-                Text("✿ mead")
-                    .font(.system(size: 26, weight: .bold, design: .rounded))
-                    .foregroundColor(Color(hex: 0xfff6e6))
-                    .shadow(color: Palette.woodDk.opacity(0.6), radius: 0, y: 2)
-                Text("a cozy home for your windows games")
-                    .font(.system(size: 15, design: .monospaced))
-                    .foregroundColor(Color(hex: 0xffe9c8))
+        Plaque {
+            HStack(alignment: .center) {
+                HStack(spacing: 8) {
+                    Text("♥").foregroundColor(Palette.heart).font(.system(size: 14))
+                    Text("MEAD")
+                        .font(.system(size: 24, weight: .heavy, design: .rounded))
+                        .tracking(3)
+                        .foregroundColor(Palette.textCream)
+                    Text("♥").foregroundColor(Palette.heart).font(.system(size: 14))
+                }
+                Spacer()
+                Text("apple silicon")
+                    .font(.system(size: 12, weight: .semibold, design: .monospaced))
+                    .foregroundColor(Palette.plaqueDk)
+                    .padding(.horizontal, 10).padding(.vertical, 3)
+                    .background(Palette.gold)
+                    .clipShape(Capsule())
             }
-            Spacer()
-            Text("apple silicon")
-                .font(.system(size: 13, design: .monospaced))
-                .foregroundColor(Palette.ink)
-                .padding(.horizontal, 10).padding(.vertical, 3)
-                .background(Palette.gold)
-                .clipShape(Capsule())
+            .padding(.horizontal, 16)
+            .padding(.vertical, 12)
         }
-        .padding(.horizontal, 14).padding(.vertical, 10)
-        .background(
-            LinearGradient(colors: [Palette.wood, Palette.woodDk],
-                           startPoint: .top, endPoint: .bottom)
-        )
-        .clipShape(RoundedRectangle(cornerRadius: 12))
-        .overlay(RoundedRectangle(cornerRadius: 12).stroke(Palette.woodDk, lineWidth: 3))
     }
 
     // MARK: toolbar
 
     private var toolbar: some View {
         HStack(spacing: 10) {
-            CozyButton(label: "▶  open steam", tint: Palette.sage, action: openSteam)
-            CozyButton(label: "＋  how to install games", tint: Palette.gold) {
+            CozyButton(label: "▶  open steam", tint: Palette.playGreen, tintDown: Palette.playGreenDk, action: openSteam)
+            CozyButton(label: "＋  how to install games", tint: Palette.gold, tintDown: Palette.goldDk) {
                 showingInstructions = true
             }
             Spacer()
-            CozyButton(label: "⟳  refresh", tint: Palette.panel2, action: refresh)
+            CozyButton(label: "⟳  refresh", tint: Palette.neutral, tintDown: Palette.neutralDk, action: refresh)
         }
     }
 
@@ -88,11 +103,14 @@ struct ContentView: View {
             emptyShelf
         } else {
             ScrollView {
-                LazyVGrid(columns: [GridItem(.adaptive(minimum: 200), spacing: 12)], spacing: 12) {
+                LazyVGrid(columns: [GridItem(.adaptive(minimum: 150), spacing: 12)], spacing: 12) {
                     ForEach(games) { game in
-                        GameCard(game: game,
-                                 isLaunching: launching == game.appID,
-                                 onPlay: { play(game) })
+                        ItemSlot(game: game, isLaunching: launching == game.appID) {
+                            selectedGame = game
+                        }
+                    }
+                    ForEach(0..<emptySlotCount, id: \.self) { _ in
+                        EmptyItemSlot()
                     }
                 }
                 .padding(14)
@@ -105,7 +123,7 @@ struct ContentView: View {
             Spacer()
             Text("🪴").font(.system(size: 52))
             Text("no games on the shelf yet")
-                .font(.system(size: 20, weight: .semibold, design: .rounded))
+                .font(.system(size: 20, weight: .bold, design: .rounded))
                 .foregroundColor(Palette.ink)
             Text("open steam, install a windows game, then hit refresh.\ntap \u{201c}how to install games\u{201d} for the steps.")
                 .multilineTextAlignment(.center)
@@ -122,20 +140,22 @@ struct ContentView: View {
     private var statusBar: some View {
         HStack(spacing: 10) {
             Circle()
-                .fill(engineReady ? Palette.sage : Palette.coral)
+                .fill(engineReady ? Palette.playGreen : Palette.closeRed)
                 .frame(width: 10, height: 10)
             Text(engineReady ? "engine: ready · wine 11 + dxmt" : status.headline)
-                .font(.system(size: 14, design: .monospaced))
-                .foregroundColor(Palette.ink)
+                .font(.system(size: 13, weight: .medium, design: .monospaced))
+                .foregroundColor(Palette.textCream)
             Spacer()
             Text("\(games.count) game\(games.count == 1 ? "" : "s")")
-                .font(.system(size: 13, design: .monospaced))
-                .foregroundColor(Palette.inkSoft)
+                .font(.system(size: 12, design: .monospaced))
+                .foregroundColor(Palette.textCream.opacity(0.75))
         }
         .padding(.horizontal, 14).padding(.vertical, 9)
-        .background(Palette.panel2)
+        .background(
+            LinearGradient(colors: [Palette.plaque, Palette.plaqueDk], startPoint: .top, endPoint: .bottom)
+        )
         .clipShape(RoundedRectangle(cornerRadius: 12))
-        .overlay(RoundedRectangle(cornerRadius: 12).stroke(Palette.line, lineWidth: 3))
+        .overlay(RoundedRectangle(cornerRadius: 12).stroke(Palette.gold, lineWidth: 2.5))
     }
 
     // MARK: actions
@@ -161,12 +181,12 @@ struct ContentView: View {
     }
 }
 
-// MARK: - Game card
+// MARK: - Item slot (a filled inventory slot: a game you own)
 
-private struct GameCard: View {
+private struct ItemSlot: View {
     let game: Game
     let isLaunching: Bool
-    let onPlay: () -> Void
+    let onTap: () -> Void
 
     private var initial: String {
         String(game.name.trimmingCharacters(in: .whitespaces).prefix(1)).uppercased()
@@ -179,67 +199,59 @@ private struct GameCard: View {
 
     private var placeholder: some View {
         ZStack {
-            LinearGradient(colors: [Palette.peach, Palette.coral],
+            LinearGradient(colors: [Palette.heart, Palette.heartDk],
                            startPoint: .topLeading, endPoint: .bottomTrailing)
             Text(initial)
-                .font(.system(size: 40, weight: .bold, design: .rounded))
-                .foregroundColor(Color(hex: 0xfff6e6))
+                .font(.system(size: 34, weight: .heavy, design: .rounded))
+                .foregroundColor(Palette.textCream)
         }
     }
 
     var body: some View {
-        VStack(spacing: 10) {
-            AsyncImage(url: coverURL) { phase in
-                if case .success(let image) = phase {
-                    image.resizable().aspectRatio(contentMode: .fill)
-                } else {
-                    placeholder
+        Button(action: onTap) {
+            VStack(spacing: 8) {
+                AsyncImage(url: coverURL) { phase in
+                    if case .success(let image) = phase {
+                        image.resizable().aspectRatio(contentMode: .fill)
+                    } else {
+                        placeholder
+                    }
                 }
-            }
-            .frame(height: 96)
-            .frame(maxWidth: .infinity)
-            .clipShape(RoundedRectangle(cornerRadius: 10))
-            .overlay(RoundedRectangle(cornerRadius: 10).stroke(Palette.line, lineWidth: 1.5))
-
-            Text(game.name)
-                .font(.system(size: 16, weight: .semibold, design: .rounded))
-                .foregroundColor(Palette.ink)
-                .lineLimit(2)
-                .multilineTextAlignment(.center)
+                .frame(height: 78)
                 .frame(maxWidth: .infinity)
-            CozyButton(label: isLaunching ? "starting…" : "▶  play",
-                       tint: isLaunching ? Palette.panel2 : Palette.sage,
-                       action: onPlay)
-                .disabled(isLaunching)
+                .clipShape(RoundedRectangle(cornerRadius: 7))
+                .overlay(RoundedRectangle(cornerRadius: 7).stroke(Palette.gold, lineWidth: 1.5))
+                .opacity(isLaunching ? 0.5 : 1)
+
+                Text(isLaunching ? "starting…" : game.name)
+                    .font(.system(size: 12.5, weight: .semibold, design: .rounded))
+                    .foregroundColor(Palette.textCream)
+                    .lineLimit(1)
+                    .frame(maxWidth: .infinity)
+            }
+            .padding(9)
+            .background(
+                LinearGradient(colors: [Palette.slot, Palette.slotDk], startPoint: .top, endPoint: .bottom)
+            )
+            .clipShape(RoundedRectangle(cornerRadius: 11))
+            .overlay(RoundedRectangle(cornerRadius: 11).stroke(Palette.gold, lineWidth: 2))
         }
-        .padding(12)
-        .background(Palette.panel)
-        .clipShape(RoundedRectangle(cornerRadius: 12))
-        .overlay(RoundedRectangle(cornerRadius: 12).stroke(Palette.line, lineWidth: 2))
+        .buttonStyle(.plain)
+        .disabled(isLaunching)
     }
 }
 
-// MARK: - Cozy button
+// MARK: - Empty item slot (open shelf space, echoing the reference's empty inventory slots)
 
-struct CozyButton: View {
-    let label: String
-    var tint: Color = Palette.panel2
-    let action: () -> Void
-    @State private var pressed = false
-
+private struct EmptyItemSlot: View {
     var body: some View {
-        Button(action: action) {
-            Text(label)
-                .font(.system(size: 15, weight: .semibold, design: .rounded))
-                .foregroundColor(Palette.ink)
-                .padding(.horizontal, 14).padding(.vertical, 8)
-                .frame(maxWidth: .infinity)
-                .background(tint)
-                .clipShape(RoundedRectangle(cornerRadius: 9))
-                .overlay(RoundedRectangle(cornerRadius: 9).stroke(Palette.lineDk, lineWidth: 2))
-                .offset(y: pressed ? 2 : 0)
-        }
-        .buttonStyle(.plain)
-        .fixedSize(horizontal: true, vertical: false)
+        RoundedRectangle(cornerRadius: 11)
+            .fill(Palette.slotEmpty)
+            .overlay(
+                RoundedRectangle(cornerRadius: 11)
+                    .strokeBorder(style: StrokeStyle(lineWidth: 2, dash: [5, 4]))
+                    .foregroundColor(Palette.goldDk.opacity(0.6))
+            )
+            .aspectRatio(1, contentMode: .fit)
     }
 }

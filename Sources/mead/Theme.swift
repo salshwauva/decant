@@ -1,23 +1,43 @@
 import SwiftUI
 
-// the cozy pixel palette, carried over from the wisp ui so mead feels like
-// the same world: warm cream, wood, peach, sage.
+// the coquette potion-shop palette: soft pink fields, dark maroon plaques
+// and item slots, an ornate gold frame, and vivid magenta heart accents.
+// reskinned from a pixel-art rpg inventory screen reference.
 enum Palette {
-    static let cream    = Color(hex: 0xf6e7c8)
-    static let cream2   = Color(hex: 0xefd8ad)
-    static let panel    = Color(hex: 0xfcf3df)
-    static let panel2   = Color(hex: 0xf6e8cb)
-    static let ink      = Color(hex: 0x5b4636)
-    static let inkSoft  = Color(hex: 0x9a7f63)
-    static let line     = Color(hex: 0xcda468)
-    static let lineDk   = Color(hex: 0xa87b46)
-    static let wood     = Color(hex: 0xbb8259)
-    static let woodDk   = Color(hex: 0x9c6743)
-    static let peach    = Color(hex: 0xf0a285)
-    static let coral    = Color(hex: 0xe07a5f)
-    static let sage     = Color(hex: 0x8aa872)
-    static let sageDk   = Color(hex: 0x6c8c54)
-    static let gold     = Color(hex: 0xe7b65a)
+    // backgrounds
+    static let bgOuter     = Color(hex: 0xe98fb8)
+    static let bgPanel     = Color(hex: 0xf6cde0)
+    static let bgPanelDeep = Color(hex: 0xefb8d2)
+
+    // plaques: dark banners and description boxes
+    static let plaque      = Color(hex: 0x3a2233)
+    static let plaqueDk    = Color(hex: 0x241420)
+
+    // item slots
+    static let slot        = Color(hex: 0x4c2c40)
+    static let slotDk      = Color(hex: 0x351f2e)
+    static let slotEmpty   = Color(hex: 0xe3a8c2)  // an open, unfilled slot: solid, not a murky blend
+
+    // the ornate gold frame and accents
+    static let gold        = Color(hex: 0xdba646)
+    static let goldDk      = Color(hex: 0xa9722c)
+
+    // text
+    static let ink         = Color(hex: 0x3a2233)
+    static let inkSoft     = Color(hex: 0x8a5570)
+    static let textCream   = Color(hex: 0xfaf0e6)
+
+    // hearts, sparkles, badges
+    static let heart       = Color(hex: 0xd6236f)
+    static let heartDk     = Color(hex: 0x9c1a52)
+
+    // buttons
+    static let playGreen   = Color(hex: 0x4ea35c)
+    static let playGreenDk = Color(hex: 0x357a41)
+    static let closeRed    = Color(hex: 0xc85062)
+    static let closeRedDk  = Color(hex: 0x8f2f3d)
+    static let neutral     = Color(hex: 0xf0b9d4)
+    static let neutralDk   = Color(hex: 0xb97e9c)
 }
 
 extension Color {
@@ -32,29 +52,110 @@ extension Color {
     }
 }
 
-// a chunky cozy panel, the swiftui cousin of the web ui's .panel.
+// the ornate double-line gold frame used around the whole window and major
+// panels, echoing the reference's scrollwork border: a dark outer line, a
+// bright inner line, and a small heart medallion at each corner.
+struct OrnateFrame: ViewModifier {
+    var corner: CGFloat = 18
+    var heartCorners: Bool = true
+
+    func body(content: Content) -> some View {
+        content
+            .overlay(RoundedRectangle(cornerRadius: corner).stroke(Palette.goldDk, lineWidth: 6))
+            .overlay(
+                RoundedRectangle(cornerRadius: max(corner - 3, 0))
+                    .inset(by: 3)
+                    .stroke(Palette.gold, lineWidth: 2)
+            )
+            .overlay(alignment: .topLeading) { if heartCorners { cornerHeart } }
+            .overlay(alignment: .topTrailing) { if heartCorners { cornerHeart } }
+            .overlay(alignment: .bottomLeading) { if heartCorners { cornerHeart } }
+            .overlay(alignment: .bottomTrailing) { if heartCorners { cornerHeart } }
+            .clipShape(RoundedRectangle(cornerRadius: corner))
+    }
+
+    private var cornerHeart: some View {
+        Text("♥")
+            .font(.system(size: 12))
+            .foregroundColor(Palette.heart)
+            .padding(7)
+    }
+}
+
+extension View {
+    func ornateFrame(corner: CGFloat = 18, heartCorners: Bool = true) -> some View {
+        modifier(OrnateFrame(corner: corner, heartCorners: heartCorners))
+    }
+}
+
+// a dark maroon plaque with a gold border: the swiftui cousin of the
+// reference's "INVENTORY" title banner and description box.
+struct Plaque<Content: View>: View {
+    var cornerRadius: CGFloat = 10
+    @ViewBuilder var content: () -> Content
+
+    var body: some View {
+        content()
+            .background(
+                LinearGradient(colors: [Palette.plaque, Palette.plaqueDk],
+                               startPoint: .top, endPoint: .bottom)
+            )
+            .overlay(RoundedRectangle(cornerRadius: cornerRadius).stroke(Palette.gold, lineWidth: 2.5))
+            .clipShape(RoundedRectangle(cornerRadius: cornerRadius))
+    }
+}
+
+// the game shelf's outer frame: a plaque title banner over a pink content
+// panel, all inside one rounded, gold-edged boundary.
 struct CozyPanel<Content: View>: View {
     var title: String
     @ViewBuilder var content: () -> Content
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
-            Text(title)
-                .font(.system(size: 17, weight: .semibold, design: .rounded))
-                .foregroundColor(Palette.ink)
-                .padding(.horizontal, 12)
-                .padding(.vertical, 8)
-                .frame(maxWidth: .infinity, alignment: .leading)
-                .overlay(alignment: .bottom) {
-                    Rectangle().fill(Palette.line).frame(height: 2)
-                }
+            Plaque(cornerRadius: 0) {
+                Text(title)
+                    .font(.system(size: 16, weight: .bold, design: .rounded))
+                    .tracking(1)
+                    .foregroundColor(Palette.textCream)
+                    .padding(.horizontal, 12)
+                    .padding(.vertical, 9)
+                    .frame(maxWidth: .infinity, alignment: .center)
+            }
             content()
+                .background(Palette.bgPanel)
         }
-        .background(Palette.panel)
-        .overlay(
-            RoundedRectangle(cornerRadius: 12)
-                .stroke(Palette.line, lineWidth: 3)
-        )
-        .clipShape(RoundedRectangle(cornerRadius: 12))
+        .overlay(RoundedRectangle(cornerRadius: 14).stroke(Palette.goldDk, lineWidth: 3))
+        .clipShape(RoundedRectangle(cornerRadius: 14))
+    }
+}
+
+// a chunky, two-tone pixel button: a light top edge fading to a darker
+// bottom edge with a dark outline, matching the reference's USE/CLOSE
+// button style. pass matching `tint`/`tintDown` pairs (see the *Dk palette
+// entries) for a proper 3d look; a flat color works too if you only pass
+// `tint`.
+struct CozyButton: View {
+    let label: String
+    var tint: Color = Palette.neutral
+    var tintDown: Color? = nil
+    let action: () -> Void
+
+    var body: some View {
+        Button(action: action) {
+            Text(label)
+                .font(.system(size: 15, weight: .bold, design: .rounded))
+                .foregroundColor(Palette.textCream)
+                .padding(.horizontal, 16).padding(.vertical, 9)
+                .frame(maxWidth: .infinity)
+                .background(
+                    LinearGradient(colors: [tint, tintDown ?? tint],
+                                   startPoint: .top, endPoint: .bottom)
+                )
+                .clipShape(RoundedRectangle(cornerRadius: 10))
+                .overlay(RoundedRectangle(cornerRadius: 10).stroke(Palette.plaqueDk, lineWidth: 2))
+        }
+        .buttonStyle(.plain)
+        .fixedSize(horizontal: true, vertical: false)
     }
 }
