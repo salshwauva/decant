@@ -177,8 +177,9 @@ struct ContentView: View {
         games = SteamManager.installedGames(bottle)
         // steam-under-wine drops a fresh, genericly-iconed shortcut on the
         // real desktop for any newly installed game, so this re-applies
-        // the themed icon every refresh rather than once at install time.
-        DesktopShortcuts.retheme(games)
+        // the official steam icon and clean name every refresh rather than
+        // once at install time.
+        DesktopShortcuts.retheme(games, bottle: bottle)
     }
 
     private func openSteam() {

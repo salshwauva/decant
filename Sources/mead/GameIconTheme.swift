@@ -1,19 +1,85 @@
 import SwiftUI
 import AppKit
 
-// renders a themed Finder icon for a game and stamps it onto that game's
-// wine/steam-generated desktop shortcuts. steam-under-wine drops a raw
-// .desktop and .url file straight onto the real macOS desktop for every
-// installed game (the bottle's wine "desktop" folder is the real one), and
-// macOS has no idea how to render an icon for either format, so they show
-// up as generic blank files sitting next to mead's own pixel-art icon.
-// this repaints them as a small locket medallion in the same coquette
-// palette and pixel font as AppIcon-source.jpg: a round gold-ringed
-// centerpiece over a soft pink field, scattered hearts and sparkles.
+// stamps each game's official steam icon onto its desktop shortcut, and
+// makes the shortcut's finder label read as the plain game name.
+//
+// steam-under-wine drops a .desktop and a .url shortcut onto the real
+// macOS desktop for every installed game. each one points at the real
+// steam-assigned icon via an ICONFILE line
+// (C:\Program Files (x86)\Steam\steam\games\<hash>.ico inside the bottle),
+// but macOS renders neither shortcut format natively, so they show up as
+// blank generic files with the raw ".desktop"/".url" extension visible.
+//
+// this loads that official .ico, upscales it with nearest-neighbor so the
+// pixel art stays crisp at every finder size, sets it as the file's custom
+// icon, and hides the extension so the label is just "Fields of Mistria".
+
+enum GameIcon {
+    // the finder sizes worth carrying so every place finder draws the icon
+    // (dock, get-info, list/column/icon views, quick look) has a sharp rep.
+    private static let sizes: [CGFloat] = [16, 32, 64, 128, 256, 512]
+
+    // the official steam icon for a game, read from the shortcut's ICONFILE
+    // path and mapped into the bottle. nil if the shortcut or the .ico is
+    // missing, in which case the caller falls back to a themed medallion.
+    static func official(for game: Game, bottle: URL, desktop: URL) -> NSImage? {
+        guard let icoPath = officialIcoPath(for: game, bottle: bottle, desktop: desktop),
+              FileManager.default.fileExists(atPath: icoPath),
+              let src = NSImage(contentsOfFile: icoPath) else { return nil }
+        return crisp(src)
+    }
+
+    // parses the ICONFILE=C:\...\<hash>.ico line out of the game's .url
+    // shortcut and rewrites the windows path onto the bottle's drive_c.
+    private static func officialIcoPath(for game: Game, bottle: URL, desktop: URL) -> String? {
+        let urlFile = desktop.appendingPathComponent("\(game.name).url")
+        guard let text = try? String(contentsOf: urlFile, encoding: .utf8) else { return nil }
+        for rawLine in text.split(whereSeparator: \.isNewline) {
+            let line = rawLine.trimmingCharacters(in: .whitespaces)
+            guard line.lowercased().hasPrefix("iconfile=") else { continue }
+            let winPath = String(line.dropFirst("iconfile=".count))
+            // "C:\Program Files (x86)\..." -> "<bottle>/drive_c/Program Files (x86)/..."
+            guard let colon = winPath.firstIndex(of: ":") else { return nil }
+            let afterDrive = winPath[winPath.index(after: colon)...]          // "\Program Files..."
+            let unixTail = afterDrive.replacingOccurrences(of: "\\", with: "/")
+            let driveC = bottle.appendingPathComponent("drive_c")
+            return driveC.path + unixTail
+        }
+        return nil
+    }
+
+    // redraws the source icon into a fresh multi-size image with
+    // interpolation disabled, so upscaling a small (often 32px) steam .ico
+    // to finder's larger sizes keeps hard pixel edges instead of blurring.
+    private static func crisp(_ src: NSImage) -> NSImage {
+        let out = NSImage(size: NSSize(width: 512, height: 512))
+        for side in sizes {
+            let rep = NSBitmapImageRep(
+                bitmapDataPlanes: nil,
+                pixelsWide: Int(side), pixelsHigh: Int(side),
+                bitsPerSample: 8, samplesPerPixel: 4,
+                hasAlpha: true, isPlanar: false,
+                colorSpaceName: .deviceRGB,
+                bytesPerRow: 0, bitsPerPixel: 0
+            )!
+            rep.size = NSSize(width: side, height: side)
+            NSGraphicsContext.saveGraphicsState()
+            let ctx = NSGraphicsContext(bitmapImageRep: rep)
+            ctx?.imageInterpolation = .none
+            NSGraphicsContext.current = ctx
+            src.draw(in: NSRect(x: 0, y: 0, width: side, height: side),
+                     from: .zero, operation: .copy, fraction: 1)
+            NSGraphicsContext.restoreGraphicsState()
+            out.addRepresentation(rep)
+        }
+        return out
+    }
+}
+
+// a themed locket-medallion icon in the app's coquette style, used only as
+// a fallback when a game has no official steam .ico to borrow.
 enum GameIconTheme {
-    // matches the icon sizes a real .icns carries, so Finder has a sharp
-    // representation at every size it actually draws (dock, get-info,
-    // list view, quick look).
     private static let sizes: [CGFloat] = [16, 32, 64, 128, 256, 512, 1024]
 
     static func icon(for game: Game) -> NSImage {
@@ -40,8 +106,6 @@ enum GameIconTheme {
         return image
     }
 
-    // a stable, cheap per-game hue offset so each medallion reads as
-    // distinct at a glance without needing bespoke art per title.
     private static func hash(_ appID: String) -> Double {
         let sum = appID.unicodeScalars.reduce(0) { $0 + Int($1.value) }
         return Double(sum % 360)
@@ -54,7 +118,6 @@ enum GameIconTheme {
 
         let ringColor = NSColor(Palette.gold).blended(withFraction: 0.18, of: NSColor(hue: CGFloat(hueShift / 360), saturation: 0.35, brightness: 1, alpha: 1)) ?? NSColor(Palette.gold)
 
-        // scattered hearts/sparkles ring, echoing AppIcon-source.jpg's trim.
         let accents: [(CGFloat, CGFloat, CGFloat, String, NSColor)] = [
             (0.16, 0.82, 0.07, "♥", NSColor(Palette.heart)),
             (0.85, 0.83, 0.055, "♥", NSColor(Palette.heartSoft)),
@@ -70,9 +133,6 @@ enum GameIconTheme {
                       size: rect.width * fSize)
         }
 
-        // the medallion: dark plaque gradient disc, gold double ring, a
-        // small bow-heart clasp at the top, and the game's initial in the
-        // bundled pixel font.
         let discRect = rect.insetBy(dx: rect.width * 0.20, dy: rect.height * 0.20)
         let discPath = NSBezierPath(ovalIn: discRect)
         let gradient = NSGradient(colors: [NSColor(Palette.plaque), NSColor(Palette.plaqueDk)])
@@ -115,21 +175,28 @@ enum GameIconTheme {
 }
 
 // finds the wine/steam-generated shortcuts for installed games on the real
-// desktop and restyles them. steam under wine regenerates these each time
-// it notices a game is installed, always with a generic or missing icon,
-// so this is safe (and cheap) to re-run on every refresh.
+// desktop, stamps each with its official steam icon (falling back to a
+// themed medallion), and hides the .desktop/.url extension so the label
+// reads as the plain game name. steam regenerates these shortcuts whenever
+// it notices a game installed, always blank-iconed and extension-bare, so
+// this is safe and cheap to re-run on every refresh.
 enum DesktopShortcuts {
     private static var desktop: URL {
         FileManager.default.urls(for: .desktopDirectory, in: .userDomainMask).first!
     }
 
-    static func retheme(_ games: [Game]) {
+    static func retheme(_ games: [Game], bottle: URL) {
         for game in games {
-            let icon = GameIconTheme.icon(for: game)
+            let icon = GameIcon.official(for: game, bottle: bottle, desktop: desktop)
+                ?? GameIconTheme.icon(for: game)
             for ext in ["desktop", "url"] {
-                let path = desktop.appendingPathComponent("\(game.name).\(ext)").path
-                guard FileManager.default.fileExists(atPath: path) else { continue }
-                NSWorkspace.shared.setIcon(icon, forFile: path, options: [])
+                var file = desktop.appendingPathComponent("\(game.name).\(ext)")
+                guard FileManager.default.fileExists(atPath: file.path) else { continue }
+                NSWorkspace.shared.setIcon(icon, forFile: file.path, options: [])
+                // show the label as just the game name, not "<game>.desktop".
+                var values = URLResourceValues()
+                values.hasHiddenExtension = true
+                try? file.setResourceValues(values)
             }
         }
     }
