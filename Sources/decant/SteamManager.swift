@@ -1,6 +1,6 @@
 import Foundation
 
-// a game mead knows about: its steam app id and display name, read from
+// a game decant knows about: its steam app id and display name, read from
 // the windows steam install inside the bottle.
 struct Game: Identifiable {
     var id: String { appID }
@@ -10,7 +10,7 @@ struct Game: Identifiable {
 
 // installs and drives the windows steam client inside a bottle, and reads
 // back which games are installed. login and the game downloads happen in
-// steam's own window; mead just sets the table.
+// steam's own window; decant just sets the table.
 enum SteamManager {
     static let steamSetupURL = "https://cdn.cloudflare.steamstatic.com/client/installer/SteamSetup.exe"
 
@@ -33,19 +33,19 @@ enum SteamManager {
                 at: dl.deletingLastPathComponent(), withIntermediateDirectories: true)
             guard let url = URL(string: steamSetupURL),
                   let data = try? Data(contentsOf: url)
-            else { throw MeadError.launch("could not download SteamSetup.exe") }
+            else { throw DecantError.launch("could not download SteamSetup.exe") }
             try data.write(to: dl)
         }
         let r = try EngineManager.run(engine.wine, [dl.path, "/S"], extraEnv: EngineManager.bottleEnv(bottle))
         if !isInstalled(bottle) {
-            throw MeadError.launch("steam install did not produce steam.exe: \(r.err)")
+            throw DecantError.launch("steam install did not produce steam.exe: \(r.err)")
         }
     }
 
     // the launch wrapper that bakes in the working wine 11 + dxmt env,
     // the webhelper wrapper, the flag set, and the virtual desktop.
     static var launchScript: URL {
-        EnginePaths.support.appendingPathComponent("engine/mead-launch.sh")
+        EnginePaths.support.appendingPathComponent("engine/decant-launch.sh")
     }
 
     // open the steam client so the user can sign in and install games.
@@ -67,7 +67,7 @@ enum SteamManager {
         let freed = Housekeeping.trimDumps(bottle)
         if freed > 0 {
             FileHandle.standardError.write(
-                Data("mead: cleared \(Housekeeping.human(freed)) of crash dumps\n".utf8))
+                Data("decant: cleared \(Housekeeping.human(freed)) of crash dumps\n".utf8))
         }
     }
 

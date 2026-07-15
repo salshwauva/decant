@@ -1,11 +1,11 @@
 import Foundation
 
-// the engine is the wine + game porting toolkit stack mead drives. mead
+// the engine is the wine + game porting toolkit stack decant drives. decant
 // owns its own bottle (a wine prefix) rather than leaning on whisky or
 // crossover at runtime. nothing here is emulation: wine runs the windows
 // program, rosetta 2 translates the x86-64, d3dmetal turns directx into metal.
 
-enum MeadError: Error, CustomStringConvertible {
+enum DecantError: Error, CustomStringConvertible {
     case noEngine
     case bottleInit(String)
     case launch(String)
@@ -162,21 +162,21 @@ enum EngineManager {
 
     // create a fresh bottle by booting wine against a new prefix.
     static func createBottle(_ name: String = defaultBottle) throws {
-        guard let engine = Engine.detect() else { throw MeadError.noEngine }
+        guard let engine = Engine.detect() else { throw DecantError.noEngine }
         let bottle = EnginePaths.bottle(name)
         try FileManager.default.createDirectory(at: bottle, withIntermediateDirectories: true)
         let r = try run(engine.wine, ["wineboot", "--init"], extraEnv: bottleEnv(bottle))
-        if r.code != 0 { throw MeadError.bottleInit(r.err.isEmpty ? "exit \(r.code)" : r.err) }
+        if r.code != 0 { throw DecantError.bottleInit(r.err.isEmpty ? "exit \(r.code)" : r.err) }
     }
 
-    // headless status report, for `mead --doctor`.
+    // headless status report, for `decant --doctor`.
     static func doctor() {
-        print("mead doctor")
+        print("decant doctor")
         switch status() {
         case .noEngine:
             print("  engine:  NOT installed (no wine / game porting toolkit found)")
             print("  looked:  \(EnginePaths.candidateWine.joined(separator: ", "))")
-            print("  next:    install game porting toolkit, then mead can make a bottle")
+            print("  next:    install game porting toolkit, then decant can make a bottle")
         case .engineNoBottle(let e):
             print("  wine:    \(e.wine)")
             print("  gptk:    \(e.gptk ?? "(not found)")")

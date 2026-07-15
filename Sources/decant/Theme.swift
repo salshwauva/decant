@@ -55,7 +55,7 @@ extension Color {
     }
 }
 
-// bundled Pixelify Sans, registered at launch in MeadApp.swift. falls back
+// bundled Pixelify Sans, registered at launch in DecantApp.swift. falls back
 // to the system rounded font automatically if registration ever fails,
 // since SwiftUI treats an unresolvable custom font name as "use default."
 enum PixelFont {

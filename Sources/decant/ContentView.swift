@@ -66,7 +66,7 @@ struct ContentView: View {
             HStack(alignment: .center) {
                 HStack(spacing: 8) {
                     Text("♥").foregroundColor(Palette.heart).font(.system(size: 14))
-                    Text("MEAD")
+                    Text("DECANT")
                         .font(PixelFont.bold(26))
                         .tracking(4)
                         .foregroundColor(Palette.textCream)

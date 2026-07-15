@@ -1,5 +1,5 @@
 #!/bin/sh
-# build mead and assemble a launchable .app bundle. no xcode project, just
+# build decant and assemble a launchable .app bundle. no xcode project, just
 # swiftpm plus a hand-written Info.plist, so it builds against the command
 # line tools sdk.
 set -e
@@ -7,12 +7,12 @@ cd "$(dirname "$0")/.."
 
 CONF=${1:-release}
 swift build -c "$CONF"
-BIN="$(swift build -c "$CONF" --show-bin-path)/mead"
+BIN="$(swift build -c "$CONF" --show-bin-path)/decant"
 
-APP="build/mead.app"
+APP="build/decant.app"
 rm -rf "$APP"
 mkdir -p "$APP/Contents/MacOS" "$APP/Contents/Resources"
-cp "$BIN" "$APP/Contents/MacOS/mead"
+cp "$BIN" "$APP/Contents/MacOS/decant"
 cp "Resources/AppIcon.icns" "$APP/Contents/Resources/AppIcon.icns"
 mkdir -p "$APP/Contents/Resources/Fonts"
 cp Resources/Fonts/*.ttf "$APP/Contents/Resources/Fonts/"
@@ -22,10 +22,10 @@ cat > "$APP/Contents/Info.plist" <<'PLIST'
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0">
 <dict>
-  <key>CFBundleName</key><string>mead</string>
-  <key>CFBundleDisplayName</key><string>mead</string>
-  <key>CFBundleIdentifier</key><string>com.sophia.mead</string>
-  <key>CFBundleExecutable</key><string>mead</string>
+  <key>CFBundleName</key><string>decant</string>
+  <key>CFBundleDisplayName</key><string>decant</string>
+  <key>CFBundleIdentifier</key><string>com.sophia.decant</string>
+  <key>CFBundleExecutable</key><string>decant</string>
   <key>CFBundleIconFile</key><string>AppIcon</string>
   <key>CFBundlePackageType</key><string>APPL</string>
   <key>CFBundleVersion</key><string>0.0.0</string>

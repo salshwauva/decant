@@ -8,15 +8,15 @@ struct InstallInstructionsView: View {
 
     private let steps: [(String, String, String)] = [
         ("1", "open steam",
-         "hit \u{201c}open steam\u{201d}. a windows steam window opens inside mead. the first time, sign in with your steam account (it remembers you after)."),
+         "hit \u{201c}open steam\u{201d}. a windows steam window opens inside decant. the first time, sign in with your steam account (it remembers you after)."),
         ("2", "find your game",
          "in steam, go to your library and pick a windows game you own. cozy single-player games work great."),
         ("3", "install it",
-         "click install and let it download. it lands in mead's bottle, fully separate from your mac steam."),
+         "click install and let it download. it lands in decant's bottle, fully separate from your mac steam."),
         ("4", "refresh the shelf",
-         "come back to mead and hit \u{201c}refresh\u{201d}. the game appears on your shelf."),
+         "come back to decant and hit \u{201c}refresh\u{201d}. the game appears on your shelf."),
         ("5", "play",
-         "tap a game's slot, then hit play. mead launches it through wine 11 + dxmt, straight to metal on your mac."),
+         "tap a game's slot, then hit play. decant launches it through wine 11 + dxmt, straight to metal on your mac."),
     ]
 
     var body: some View {
@@ -96,7 +96,7 @@ struct InstallInstructionsView: View {
             Text("good to know")
                 .font(PixelFont.bold(15))
                 .foregroundColor(Palette.textCream)
-            Text("single-player and many online games run well. games with kernel-level anti-cheat (a lot of competitive multiplayer) don't run on macos in any wrapper, that's a mac limitation, not mead's.")
+            Text("single-player and many online games run well. games with kernel-level anti-cheat (a lot of competitive multiplayer) don't run on macos in any wrapper, that's a mac limitation, not decant's.")
                 .font(.system(size: 14, design: .monospaced))
                 .foregroundColor(Palette.textCream.opacity(0.85))
                 .fixedSize(horizontal: false, vertical: true)

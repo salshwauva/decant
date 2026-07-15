@@ -2,14 +2,14 @@ import SwiftUI
 import CoreText
 
 @main
-struct MeadApp: App {
+struct DecantApp: App {
     init() {
         handleCLI()
         registerBundledFonts()
     }
 
     var body: some Scene {
-        WindowGroup("mead") {
+        WindowGroup("decant") {
             ContentView()
                 .frame(minWidth: 820, minHeight: 560)
         }
@@ -32,9 +32,9 @@ private func handleCLI() {
 
     if args.contains("--init-bottle") {
         runOrDie {
-            print("mead: creating bottle (first boot can take a minute)...")
+            print("decant: creating bottle (first boot can take a minute)...")
             try EngineManager.createBottle()
-            print("mead: bottle ready")
+            print("decant: bottle ready")
             EngineManager.doctor()
         }
     }
@@ -42,30 +42,30 @@ private func handleCLI() {
     if args.contains("--install-steam") {
         runOrDie {
             try SteamManager.installSteam(into: bottle, engine: try requireEngine())
-            print("mead: steam installed")
+            print("decant: steam installed")
         }
     }
 
     if args.contains("--steam") {
         runOrDie {
             try SteamManager.launchClient(bottle, engine: try requireEngine())
-            print("mead: launched steam client (sign in there)")
+            print("decant: launched steam client (sign in there)")
         }
     }
 
     if args.contains("--gc") {
         let bytes = Housekeeping.dumpBytes(bottle)
-        print("mead: crash dumps \(Housekeeping.human(bytes)) (cap \(Housekeeping.human(Housekeeping.dumpCapBytes)))")
+        print("decant: crash dumps \(Housekeeping.human(bytes)) (cap \(Housekeeping.human(Housekeeping.dumpCapBytes)))")
         let freed = Housekeeping.trimDumps(bottle)
         print(freed > 0
-            ? "mead: over cap, cleared \(Housekeeping.human(freed))"
-            : "mead: under cap, nothing to clear")
+            ? "decant: over cap, cleared \(Housekeeping.human(freed))"
+            : "decant: under cap, nothing to clear")
         exit(0)
     }
 
     if args.contains("--games") {
         let games = SteamManager.installedGames(bottle)
-        if games.isEmpty { print("mead: no games installed in the bottle yet") }
+        if games.isEmpty { print("decant: no games installed in the bottle yet") }
         for g in games { print("  \(g.appID)\t\(g.name)") }
         exit(0)
     }
@@ -73,7 +73,7 @@ private func handleCLI() {
     if args.contains("--theme-icons") {
         let games = SteamManager.installedGames(bottle)
         DesktopShortcuts.retheme(games, bottle: bottle)
-        print("mead: re-themed desktop icons for \(games.count) game\(games.count == 1 ? "" : "s")")
+        print("decant: re-themed desktop icons for \(games.count) game\(games.count == 1 ? "" : "s")")
         exit(0)
     }
 
@@ -81,7 +81,7 @@ private func handleCLI() {
         let appid = args[i + 1]
         runOrDie {
             try SteamManager.launchGame(appID: appid, bottle: bottle, engine: try requireEngine())
-            print("mead: launching app \(appid)")
+            print("decant: launching app \(appid)")
         }
     }
 }
@@ -101,13 +101,13 @@ private func registerBundledFonts() {
 }
 
 private func requireEngine() throws -> Engine {
-    guard let e = Engine.detect() else { throw MeadError.noEngine }
+    guard let e = Engine.detect() else { throw DecantError.noEngine }
     return e
 }
 
 private func runOrDie(_ body: () throws -> Void) -> Never {
     do { try body() } catch {
-        print("mead: \(error)")
+        print("decant: \(error)")
         exit(1)
     }
     exit(0)
