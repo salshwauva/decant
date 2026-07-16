@@ -19,9 +19,9 @@ struct ContentView: View {
     // the game count). spacing widened for more air between games.
     private let columnCount = 4
     private let cellWidth: CGFloat = 168
-    private let gridSpacing: CGFloat = 44
+    private let gridSpacing: CGFloat = 64
     // ~3 rows before the library starts scrolling.
-    private let libraryCap: CGFloat = 528
+    private let libraryCap: CGFloat = 560
 
     private var columns: [GridItem] {
         Array(repeating: GridItem(.fixed(cellWidth), spacing: gridSpacing), count: columnCount)
@@ -186,13 +186,10 @@ struct ContentView: View {
                 .fill(engineReady ? Palette.pip : Palette.wine)
                 .frame(width: 9, height: 9)
                 .shadow(color: (engineReady ? Palette.pip : Palette.wine).opacity(0.7), radius: 4)
-            Text(engineReady ? "engine: ready · wine 11 + dxmt" : status.headline)
+            Text(engineReady ? "engine: ready" : status.headline)
                 .font(.system(size: 12, design: .monospaced))
                 .foregroundColor(Palette.inkDim)
             Spacer()
-            Text("rosetta → metal")
-                .font(.system(size: 11, design: .monospaced))
-                .foregroundColor(Palette.inkMut)
         }
         .padding(.horizontal, 14).padding(.vertical, 10)
         .background(
