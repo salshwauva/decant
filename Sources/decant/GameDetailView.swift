@@ -24,7 +24,7 @@ struct GameDetailView: View {
                 hero
                 label
                 HStack(spacing: 12) {
-                    PixelButton(label: isLaunching ? "starting…" : "▶  PLAY",
+                    PixelButton(label: isLaunching ? "pouring…" : "▶  PLAY",
                                 top: Palette.wineHi, bottom: Palette.wine, text: Palette.cream, fill: true,
                                 action: onPlay)
                         .disabled(isLaunching)
@@ -39,23 +39,38 @@ struct GameDetailView: View {
         .frame(width: 420, height: 470)
     }
 
-    private var hero: some View {
-        AsyncImage(url: coverURL) { phase in
-            if case .success(let image) = phase {
-                image.resizable().aspectRatio(contentMode: .fill)
-            } else {
-                ZStack {
-                    LinearGradient(colors: [Palette.wine, Palette.wineDk], startPoint: .topLeading, endPoint: .bottomTrailing)
-                    Text(String(game.name.trimmingCharacters(in: .whitespaces).prefix(1)).uppercased())
-                        .font(PixelFont.bold(56))
-                        .foregroundColor(Palette.cream)
+    @ViewBuilder private var hero: some View {
+        if isLaunching {
+            // the game is pouring — literally. the pour animation stands in
+            // for the cover while it spins up.
+            ZStack {
+                LinearGradient(colors: [Palette.niche, Palette.nicheDk], startPoint: .top, endPoint: .bottom)
+                PourAnimation()
+                    .frame(height: 170)
+                    .padding(.top, 6)
+            }
+            .frame(height: 190)
+            .frame(maxWidth: .infinity)
+            .clipped()
+            .bevel(raised: false, width: 3)
+        } else {
+            AsyncImage(url: coverURL) { phase in
+                if case .success(let image) = phase {
+                    image.resizable().aspectRatio(contentMode: .fill)
+                } else {
+                    ZStack {
+                        LinearGradient(colors: [Palette.wine, Palette.wineDk], startPoint: .topLeading, endPoint: .bottomTrailing)
+                        Text(String(game.name.trimmingCharacters(in: .whitespaces).prefix(1)).uppercased())
+                            .font(PixelFont.bold(56))
+                            .foregroundColor(Palette.cream)
+                    }
                 }
             }
+            .frame(height: 190)
+            .frame(maxWidth: .infinity)
+            .clipped()
+            .bevel(raised: false, width: 3)
         }
-        .frame(height: 190)
-        .frame(maxWidth: .infinity)
-        .clipped()
-        .bevel(raised: false, width: 3)
     }
 
     private var label: some View {
@@ -84,7 +99,7 @@ struct GameDetailView: View {
                     .tracking(2)
                     .foregroundColor(Palette.inkMut)
                 Divider().overlay(Palette.labelEdge).padding(.top, 5)
-                Text(isLaunching ? "launching through wine + dxmt…" : "ready to play · wine 11 + dxmt")
+                Text(isLaunching ? "pouring… · wine 11 + dxmt" : "ready to play · wine 11 + dxmt")
                     .font(.system(size: 11, design: .monospaced))
                     .foregroundColor(Palette.inkDim)
                     .padding(.top, 5)

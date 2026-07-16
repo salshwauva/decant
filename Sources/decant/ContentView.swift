@@ -59,7 +59,7 @@ struct ContentView: View {
 
     private var header: some View {
         HStack(alignment: .center, spacing: 13) {
-            BrandSeal(size: 44)
+            BrandLogo(size: 46)
             VStack(alignment: .leading, spacing: 3) {
                 Text("DECANT")
                     .font(PixelFont.bold(31))

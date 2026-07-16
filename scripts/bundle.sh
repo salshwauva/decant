@@ -16,6 +16,9 @@ cp "$BIN" "$APP/Contents/MacOS/decant"
 cp "Resources/AppIcon.icns" "$APP/Contents/Resources/AppIcon.icns"
 mkdir -p "$APP/Contents/Resources/Fonts"
 cp Resources/Fonts/*.ttf "$APP/Contents/Resources/Fonts/"
+cp Resources/logo-d.png "$APP/Contents/Resources/logo-d.png"
+mkdir -p "$APP/Contents/Resources/pour"
+cp Resources/pour/*.png "$APP/Contents/Resources/pour/"
 
 cat > "$APP/Contents/Info.plist" <<'PLIST'
 <?xml version="1.0" encoding="UTF-8"?>
