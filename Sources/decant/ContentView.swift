@@ -9,15 +9,30 @@ struct ContentView: View {
 
     private var bottle: URL { EnginePaths.bottle(EngineManager.defaultBottle) }
 
-    // pad the shelf out with a few empty niches so the rack never looks
-    // half-built, echoing the reference inventory screen's open slots.
-    // capped so a big library doesn't produce a wall of empty boxes.
+    // measured natural height of the game grid, so the library can size to
+    // its contents (few games -> short rack) up to a cap, past which it
+    // scrolls instead of growing further.
+    @State private var libraryHeight: CGFloat = 0
+
+    // a fixed four-wide grid of fixed-width niches: deterministic width (so
+    // the window doesn't reflow) and deterministic rows (so height tracks
+    // the game count). spacing widened for more air between games.
+    private let columnCount = 4
+    private let cellWidth: CGFloat = 168
+    private let gridSpacing: CGFloat = 22
+    // ~3 rows before the library starts scrolling.
+    private let libraryCap: CGFloat = 484
+
+    private var columns: [GridItem] {
+        Array(repeating: GridItem(.fixed(cellWidth), spacing: gridSpacing), count: columnCount)
+    }
+
+    // fill only the last partial row, so the grid reads as complete without
+    // padding out extra empty rows that would fight the size-to-content rack.
     private var emptySlotCount: Int {
         guard !games.isEmpty else { return 0 }
-        let columns = 4
-        let remainder = games.count % columns
-        let fillRow = remainder == 0 ? 0 : columns - remainder
-        return min(fillRow + columns, 8)
+        let remainder = games.count % columnCount
+        return remainder == 0 ? 0 : columnCount - remainder
     }
 
     var body: some View {
@@ -30,7 +45,6 @@ struct ContentView: View {
                 header
                 toolbar
                 rack
-                    .frame(maxWidth: .infinity, maxHeight: .infinity)
                 ledger
             }
             .padding(16)
@@ -102,8 +116,8 @@ struct ContentView: View {
             if games.isEmpty {
                 emptyShelf
             } else {
-                ScrollView {
-                    LazyVGrid(columns: [GridItem(.adaptive(minimum: 150), spacing: 13)], spacing: 13) {
+                ScrollView(.vertical, showsIndicators: true) {
+                    LazyVGrid(columns: columns, spacing: gridSpacing) {
                         ForEach(games) { game in
                             ItemSlot(game: game, isLaunching: launching == game.appID) {
                                 selectedGame = game
@@ -113,8 +127,13 @@ struct ContentView: View {
                             EmptyItemSlot()
                         }
                     }
-                    .padding(2)
+                    .padding(.vertical, 4)
+                    .background(GeometryReader { g in
+                        Color.clear.preference(key: LibraryHeightKey.self, value: g.size.height)
+                    })
                 }
+                .frame(height: min(libraryHeight, libraryCap))
+                .onPreferenceChange(LibraryHeightKey.self) { libraryHeight = $0 }
             }
         }
         .padding(15)
@@ -139,8 +158,10 @@ struct ContentView: View {
 
     private var emptyShelf: some View {
         VStack(spacing: 14) {
-            HStack(spacing: 12) {
-                ForEach(0..<4, id: \.self) { _ in EmptyItemSlot() }
+            HStack(spacing: gridSpacing) {
+                ForEach(0..<columnCount, id: \.self) { _ in
+                    EmptyItemSlot().frame(width: cellWidth)
+                }
             }
             Text("no games yet")
                 .font(PixelFont.bold(20))
@@ -150,8 +171,7 @@ struct ContentView: View {
                 .font(.system(size: 12, design: .monospaced))
                 .foregroundColor(Palette.cream.opacity(0.8))
         }
-        .frame(maxWidth: .infinity, maxHeight: .infinity)
-        .padding(24)
+        .padding(.vertical, 24)
     }
 
     // MARK: ledger status
@@ -240,7 +260,7 @@ private struct ItemSlot: View {
                         placeholder
                     }
                 }
-                .frame(height: 80)
+                .frame(height: 90)
                 .frame(maxWidth: .infinity)
                 .clipped()
                 .bevel(raised: false, width: 2)
@@ -274,5 +294,14 @@ private struct EmptyItemSlot: View {
             Text("＋").font(.system(size: 20)).foregroundColor(Palette.emptyBd)
         }
         .aspectRatio(16.0/9.0, contentMode: .fit)
+    }
+}
+
+// carries the game grid's natural height up so the library can size to its
+// contents (and cap into a scroll past a threshold).
+private struct LibraryHeightKey: PreferenceKey {
+    static var defaultValue: CGFloat = 0
+    static func reduce(value: inout CGFloat, nextValue: () -> CGFloat) {
+        value = max(value, nextValue())
     }
 }

@@ -11,9 +11,10 @@ struct DecantApp: App {
     var body: some Scene {
         WindowGroup("decant") {
             ContentView()
-                .frame(minWidth: 820, minHeight: 560)
         }
-        .defaultSize(width: 980, height: 640)
+        // size the window to its content, so the library height (and thus the
+        // window) tracks the number of games until the rack caps and scrolls.
+        .windowResizability(.contentSize)
         .windowStyle(.hiddenTitleBar)
     }
 }
