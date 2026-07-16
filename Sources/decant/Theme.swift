@@ -6,70 +6,70 @@ import SwiftUI
 // pixel bevels (see the bevel modifier) carry the retro-game feel.
 enum Palette {
     // grounds
-    static let bg        = Color(hex: 0xf7ecd6)
-    static let bgHi      = Color(hex: 0xfdf6e6)
-    static let bgDeep    = Color(hex: 0xeeddc0)
-    static let page      = Color(hex: 0xe2d1ad)
-    static let titlebar  = Color(hex: 0xecdcbb)
-    static let titleEdge = Color(hex: 0xd8c095)
+    static let bg        = Color(hex: 0xfbeaf1)
+    static let bgHi      = Color(hex: 0xfef3f8)
+    static let bgDeep    = Color(hex: 0xf2dbe6)
+    static let page      = Color(hex: 0xe9cdd9)
+    static let titlebar  = Color(hex: 0xf3dde8)
+    static let titleEdge = Color(hex: 0xe0bdcf)
 
-    // text (dark on light)
-    static let ink       = Color(hex: 0x43301d)
-    static let inkDim    = Color(hex: 0x6e523a)
-    static let inkMut    = Color(hex: 0x9a8062)
-    static let cream     = Color(hex: 0xfdf5e6)
+    // text (deep plum on light pink)
+    static let ink       = Color(hex: 0x5a2440)
+    static let inkDim    = Color(hex: 0x8a4568)
+    static let inkMut    = Color(hex: 0xb07f98)
+    static let cream     = Color(hex: 0xfdf3f8)
 
-    // honey-oak rack
-    static let wood      = Color(hex: 0xc58f52)
-    static let woodDk    = Color(hex: 0xa4713a)
-    static let woodEdge  = Color(hex: 0x79501f)
-    static let woodShade = Color(hex: 0x5a3a14)  // bevel low-tone, wood shadow
+    // rosewood rack
+    static let wood      = Color(hex: 0xc77b9e)
+    static let woodDk    = Color(hex: 0xa85a80)
+    static let woodEdge  = Color(hex: 0x7e3c5e)
+    static let woodShade = Color(hex: 0x5a2440)  // bevel low-tone, rack shadow
 
     // cubby niche
-    static let niche     = Color(hex: 0xf9efda)
-    static let nicheDk   = Color(hex: 0xf1e2c7)
-    static let nicheBd   = Color(hex: 0xc9b085)
+    static let niche     = Color(hex: 0xfdeef5)
+    static let nicheDk   = Color(hex: 0xf6dfeb)
+    static let nicheBd   = Color(hex: 0xe2b8ce)
 
-    // berry-wine action
-    static let wine      = Color(hex: 0xc8455c)
-    static let wineHi    = Color(hex: 0xd95a70)
-    static let wineDk    = Color(hex: 0x9a2f44)
+    // hot-pink action
+    static let wine      = Color(hex: 0xd94f92)
+    static let wineHi    = Color(hex: 0xe86aa6)
+    static let wineDk    = Color(hex: 0x9c2f66)
 
-    // brass
+    // brass (pink + gold reads coquette)
     static let brass     = Color(hex: 0xdca63f)
     static let brassHi   = Color(hex: 0xf3d385)
     static let brassDk   = Color(hex: 0xa9772a)
-    static let brassInk  = Color(hex: 0x3a2410)
+    static let brassInk  = Color(hex: 0x4a2a10)
 
     // brass nameplate
     static let plateHi   = Color(hex: 0xf2cf79)
     static let plateLo   = Color(hex: 0xd6a743)
 
-    // cork (refresh / close)
-    static let cork      = Color(hex: 0xbb8c58)
-    static let corkDk    = Color(hex: 0x8f5f31)
-    static let corkEdge  = Color(hex: 0x6e4a25)
+    // mauve cork (refresh / close)
+    static let cork      = Color(hex: 0xb87a99)
+    static let corkDk    = Color(hex: 0x8a5273)
+    static let corkEdge  = Color(hex: 0x5f3450)
 
-    // cream bottle-label
-    static let label     = Color(hex: 0xfbf1dd)
-    static let labelEdge = Color(hex: 0xe0cb9f)
+    // near-white pink bottle-label
+    static let label     = Color(hex: 0xfdf3f8)
+    static let labelEdge = Color(hex: 0xecccdd)
 
     // wax seal (brand mark + label accent)
-    static let seal      = Color(hex: 0xe07480)
-    static let sealDk    = Color(hex: 0xb13f4e)
-    static let sealBd    = Color(hex: 0x8a2f3c)
-    static let sealInk   = Color(hex: 0xfff0ec)
+    static let seal      = Color(hex: 0xe86aa6)
+    static let sealDk    = Color(hex: 0xb23f70)
+    static let sealBd    = Color(hex: 0x8a2f5c)
+    static let sealInk   = Color(hex: 0xfff0f6)
 
     // misc
-    static let brand     = Color(hex: 0xa5324a)  // DECANT wordmark
-    static let pip       = Color(hex: 0x5aa55f)  // engine-ready dot
-    static let emptyBd   = Color(hex: 0xc6a56d)
-    static let ledgerHi  = Color(hex: 0xf2e5c8)
-    static let ledgerLo  = Color(hex: 0xe8d7b5)
+    static let brand     = Color(hex: 0xb23472)  // DECANT wordmark
+    static let pip       = Color(hex: 0x5aa55f)  // engine-ready dot (green = go)
+    static let emptyBd   = Color(hex: 0xd9a8c2)
+    static let ledgerHi  = Color(hex: 0xf6e0ec)
+    static let ledgerLo  = Color(hex: 0xecccdd)
 
     // bevel tones (fill-agnostic, so one pair works on any panel)
     static let bevelHi   = Color.white.opacity(0.6)
-    static let bevelLo   = Color(hex: 0x5a3a14).opacity(0.5)
+    static let bevelLo   = Color(hex: 0x5a2440).opacity(0.45)
 }
 
 extension Color {
