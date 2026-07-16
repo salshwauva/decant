@@ -19,9 +19,9 @@ struct ContentView: View {
     // the game count). spacing widened for more air between games.
     private let columnCount = 4
     private let cellWidth: CGFloat = 168
-    private let gridSpacing: CGFloat = 22
+    private let gridSpacing: CGFloat = 44
     // ~3 rows before the library starts scrolling.
-    private let libraryCap: CGFloat = 484
+    private let libraryCap: CGFloat = 528
 
     private var columns: [GridItem] {
         Array(repeating: GridItem(.fixed(cellWidth), spacing: gridSpacing), count: columnCount)
