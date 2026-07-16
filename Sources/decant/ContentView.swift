@@ -80,6 +80,15 @@ struct ContentView: View {
                     .foregroundColor(Palette.inkMut)
             }
             Spacer()
+            HStack(spacing: 5) {
+                Text("♥").foregroundColor(Palette.cream.opacity(0.85))
+                Text("\(games.count) game\(games.count == 1 ? "" : "s")")
+            }
+            .font(.system(size: 11, weight: .bold, design: .monospaced))
+            .foregroundColor(Palette.cream)
+            .padding(.horizontal, 11).padding(.vertical, 6)
+            .background(LinearGradient(colors: [Palette.wineHi, Palette.wine], startPoint: .top, endPoint: .bottom))
+            .clipShape(Capsule())
         }
     }
 
@@ -120,6 +129,7 @@ struct ContentView: View {
                                 selectedGame = game
                             }
                         }
+                        AddGameTile(action: openSteam)
                     }
                     .padding(.vertical, 4)
                     .background(GeometryReader { g in
@@ -138,11 +148,18 @@ struct ContentView: View {
     private var rackHead: some View {
         HStack(spacing: 10) {
             Rectangle().fill(Palette.nicheBd).frame(height: 2)
-            Text("YOUR  GAMES")
-                .font(PixelFont.medium(14))
-                .tracking(4)
-                .foregroundColor(Palette.inkDim)
-                .fixedSize()
+            HStack(spacing: 7) {
+                Text("✦").foregroundColor(Palette.brass)
+                Text("♥").foregroundColor(Palette.seal)
+                Text("YOUR  GAMES")
+                    .font(PixelFont.medium(14))
+                    .tracking(4)
+                    .foregroundColor(Palette.inkDim)
+                Text("♥").foregroundColor(Palette.seal)
+                Text("✦").foregroundColor(Palette.brass)
+            }
+            .font(.system(size: 13))
+            .fixedSize()
             Rectangle().fill(Palette.nicheBd).frame(height: 2)
         }
     }
@@ -173,7 +190,7 @@ struct ContentView: View {
                 .font(.system(size: 12, design: .monospaced))
                 .foregroundColor(Palette.inkDim)
             Spacer()
-            Text("\(games.count) game\(games.count == 1 ? "" : "s")")
+            Text("rosetta → metal")
                 .font(.system(size: 11, design: .monospaced))
                 .foregroundColor(Palette.inkMut)
         }
@@ -246,18 +263,33 @@ private struct ItemSlot: View {
     var body: some View {
         Button(action: onTap) {
             VStack(spacing: 8) {
-                AsyncImage(url: coverURL) { phase in
-                    if case .success(let image) = phase {
-                        image.resizable().aspectRatio(contentMode: .fill)
-                    } else {
-                        placeholder
+                ZStack {
+                    AsyncImage(url: coverURL) { phase in
+                        if case .success(let image) = phase {
+                            image.resizable().aspectRatio(contentMode: .fill)
+                        } else {
+                            placeholder
+                        }
+                    }
+                    .frame(height: 90)
+                    .frame(maxWidth: .infinity)
+                    .clipped()
+                    .brightness(hovering && !isLaunching ? -0.3 : 0)
+                    .opacity(isLaunching ? 0.5 : 1)
+
+                    // hovering a game reads as click-to-play: dim the cover and
+                    // surface a play chip.
+                    if hovering && !isLaunching {
+                        Text("▶ play")
+                            .font(PixelFont.medium(13))
+                            .foregroundColor(Palette.cream)
+                            .padding(.horizontal, 12).padding(.vertical, 5)
+                            .background(LinearGradient(colors: [Palette.wineHi, Palette.wine], startPoint: .top, endPoint: .bottom))
+                            .bevel(width: 2)
                     }
                 }
                 .frame(height: 90)
-                .frame(maxWidth: .infinity)
-                .clipped()
                 .bevel(raised: false, width: 2)
-                .opacity(isLaunching ? 0.5 : 1)
 
                 BrassPlate(text: isLaunching ? "starting…" : game.name, starting: isLaunching)
             }
@@ -267,11 +299,38 @@ private struct ItemSlot: View {
         }
         .buttonStyle(.plain)
         .scaleEffect(hovering && !isLaunching ? 1.035 : 1.0)
-        .shadow(color: Palette.brass.opacity(hovering && !isLaunching ? 0.6 : 0),
+        .shadow(color: Palette.wine.opacity(hovering && !isLaunching ? 0.5 : 0),
                 radius: hovering ? 10 : 0)
         .animation(.easeOut(duration: 0.14), value: hovering)
         .onHover { hovering = $0 }
         .disabled(isLaunching)
+    }
+}
+
+// MARK: - Add-a-game tile (an in-grid affordance at the end of the shelf)
+
+private struct AddGameTile: View {
+    let action: () -> Void
+    @State private var hovering = false
+
+    var body: some View {
+        Button(action: action) {
+            VStack(spacing: 6) {
+                Text("＋").font(.system(size: 30))
+                Text("add a game").font(.system(size: 11, design: .monospaced)).tracking(1)
+            }
+            .foregroundColor(hovering ? Palette.wineDk : Palette.brassDk)
+            .frame(maxWidth: .infinity)
+            .frame(height: 144)
+            .background((hovering ? Palette.wine : Palette.brass).opacity(0.14))
+            .overlay(
+                Rectangle()
+                    .strokeBorder(style: StrokeStyle(lineWidth: 3, dash: [6, 4]))
+                    .foregroundColor(hovering ? Palette.wine : Palette.brassDk)
+            )
+        }
+        .buttonStyle(.plain)
+        .onHover { hovering = $0 }
     }
 }
 
