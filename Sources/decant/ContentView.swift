@@ -52,7 +52,8 @@ struct ContentView: View {
                 game: game,
                 isLaunching: launching == game.appID,
                 onPlay: { play(game) },
-                onClose: { selectedGame = nil }
+                onClose: { selectedGame = nil },
+                onUninstall: { uninstall(game) }
             )
         }
     }
@@ -92,10 +93,9 @@ struct ContentView: View {
 
     private var toolbar: some View {
         HStack(spacing: 10) {
-            PixelButton(label: "▶  open steam", top: Palette.wineHi, bottom: Palette.wine, text: Palette.cream, action: openSteam)
             // adding a game means installing it in steam, so this opens the
             // steam client where the library and store live.
-            PixelButton(label: "＋  add a game", top: Palette.brassHi, bottom: Palette.brass, text: Palette.brassInk, action: openSteam)
+            PixelButton(label: "＋  add a game", top: Palette.wineHi, bottom: Palette.wine, text: Palette.cream, action: openSteam)
             Spacer()
             PixelButton(label: "⟳  refresh", top: Palette.cork, bottom: Palette.corkDk, text: Palette.cream, action: refresh)
         }
@@ -136,24 +136,18 @@ struct ContentView: View {
                 .onPreferenceChange(LibraryHeightKey.self) { libraryHeight = $0 }
             }
         }
-        .padding(15)
-        .background(
-            LinearGradient(colors: [Palette.wood.opacity(0.5), Palette.woodDk.opacity(0.5)],
-                           startPoint: .top, endPoint: .bottom)
-        )
-        .bevel(raised: false, width: 3)
+        .padding(.horizontal, 4)
     }
 
     private var rackHead: some View {
         HStack(spacing: 10) {
-            Rectangle().fill(Palette.cream.opacity(0.45)).frame(height: 2)
+            Rectangle().fill(Palette.nicheBd).frame(height: 2)
             Text("YOUR  GAMES")
                 .font(PixelFont.medium(14))
                 .tracking(4)
-                .foregroundColor(Palette.cream)
-                .shadow(color: Palette.woodShade.opacity(0.6), radius: 0, x: 0, y: 1)
+                .foregroundColor(Palette.inkDim)
                 .fixedSize()
-            Rectangle().fill(Palette.cream.opacity(0.45)).frame(height: 2)
+            Rectangle().fill(Palette.nicheBd).frame(height: 2)
         }
     }
 
@@ -161,11 +155,11 @@ struct ContentView: View {
         VStack(spacing: 10) {
             Text("no games yet")
                 .font(PixelFont.bold(20))
-                .foregroundColor(Palette.cream)
-            Text("hit \u{201c}add a game\u{201d}, install a windows game in steam,\nthen refresh. it shows up on the rack here.")
+                .foregroundColor(Palette.ink)
+            Text("hit \u{201c}add a game\u{201d}, install a windows game in steam,\nthen refresh. it shows up here.")
                 .multilineTextAlignment(.center)
                 .font(.system(size: 12, design: .monospaced))
-                .foregroundColor(Palette.cream.opacity(0.85))
+                .foregroundColor(Palette.inkMut)
         }
         .frame(maxWidth: .infinity)
         .padding(.vertical, 40)
@@ -218,6 +212,12 @@ struct ContentView: View {
         DispatchQueue.main.asyncAfter(deadline: .now() + 6) {
             if launching == game.appID { launching = nil }
         }
+    }
+
+    private func uninstall(_ game: Game) {
+        guard let engine = Engine.detect() else { return }
+        try? SteamManager.uninstallGame(appID: game.appID, bottle: bottle, engine: engine)
+        selectedGame = nil
     }
 }
 

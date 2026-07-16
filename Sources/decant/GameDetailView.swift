@@ -9,6 +9,7 @@ struct GameDetailView: View {
     let isLaunching: Bool
     let onPlay: () -> Void
     let onClose: () -> Void
+    var onUninstall: () -> Void = {}
 
     private var coverURL: URL? {
         URL(string: "https://cdn.cloudflare.steamstatic.com/steam/apps/\(game.appID)/header.jpg")
@@ -20,7 +21,7 @@ struct GameDetailView: View {
                            startPoint: .top, endPoint: .bottom)
                 .ignoresSafeArea()
 
-            VStack(spacing: 14) {
+            VStack(spacing: 12) {
                 hero
                 label
                 HStack(spacing: 12) {
@@ -32,11 +33,20 @@ struct GameDetailView: View {
                                 top: Palette.cork, bottom: Palette.corkDk, text: Palette.cream, fill: true,
                                 action: onClose)
                 }
+                // quiet, secondary: hands off to steam's own uninstall dialog.
+                Button(action: onUninstall) {
+                    Text("uninstall from steam")
+                        .font(.system(size: 11, design: .monospaced))
+                        .foregroundColor(Palette.inkMut)
+                        .underline()
+                }
+                .buttonStyle(.plain)
+                .disabled(isLaunching)
             }
             .padding(20)
         }
         .bevel(width: 3)
-        .frame(width: 420, height: 470)
+        .frame(width: 420, height: 486)
     }
 
     @ViewBuilder private var hero: some View {

@@ -35,15 +35,15 @@ enum Palette {
     static let wineHi    = Color(hex: 0xe86aa6)
     static let wineDk    = Color(hex: 0x9c2f66)
 
-    // brass (pink + gold reads coquette)
-    static let brass     = Color(hex: 0xdca63f)
-    static let brassHi   = Color(hex: 0xf3d385)
-    static let brassDk   = Color(hex: 0xa9772a)
-    static let brassInk  = Color(hex: 0x4a2a10)
+    // rose-gold (a warm metallic accent without the yellow)
+    static let brass     = Color(hex: 0xd79aa0)
+    static let brassHi   = Color(hex: 0xeec3c6)
+    static let brassDk   = Color(hex: 0xab6b72)
+    static let brassInk  = Color(hex: 0x4a2036)
 
-    // brass nameplate
-    static let plateHi   = Color(hex: 0xf2cf79)
-    static let plateLo   = Color(hex: 0xd6a743)
+    // rose-gold nameplate
+    static let plateHi   = Color(hex: 0xeec3c6)
+    static let plateLo   = Color(hex: 0xd18f97)
 
     // mauve cork (refresh / close)
     static let cork      = Color(hex: 0xb87a99)

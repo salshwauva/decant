@@ -61,6 +61,13 @@ enum SteamManager {
         try EngineManager.spawn("/bin/bash", [launchScript.path, "play", appID])
     }
 
+    // hand a game off to steam's own uninstall flow (steam://uninstall/<id>).
+    // decant doesn't manage installs itself, so removing a game happens in
+    // steam, same as installing.
+    static func uninstallGame(appID: String, bottle: URL, engine: Engine) throws {
+        try EngineManager.spawn("/bin/bash", [launchScript.path, "uninstall", appID])
+    }
+
     // clear crash dumps before launching if they've grown past the cap, so a
     // crash-loop can never fill the disk the way it did during bring-up.
     private static func clearDumpsIfBig(_ bottle: URL) {
