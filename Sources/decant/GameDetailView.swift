@@ -1,9 +1,8 @@
 import SwiftUI
 
-// the game detail sheet: a close mirror of the reference inventory
-// screen's item-detail popup (ornate frame, a title plaque, a large hero
-// image ringed with heart/sparkle accents, a description plaque, and a
-// USE/CLOSE-style button pair), mapped onto what it's logically for here:
+// the game detail sheet: a large cover over a cream bottle-label (wax-seal
+// accent, title, steam id, ready line) and a PLAY / CLOSE pair. mirrors the
+// reference inventory screen's item popup, mapped onto what it's for here:
 // launch the game, or back out.
 struct GameDetailView: View {
     let game: Game
@@ -17,90 +16,83 @@ struct GameDetailView: View {
 
     var body: some View {
         ZStack {
-            LinearGradient(colors: [Palette.bgOuter, Palette.bgOuterDeep],
+            LinearGradient(colors: [Palette.bgHi, Palette.bg, Palette.bgDeep],
                            startPoint: .top, endPoint: .bottom)
                 .ignoresSafeArea()
 
             VStack(spacing: 14) {
-                Plaque {
-                    Text(game.name.uppercased())
-                        .font(PixelFont.bold(19))
-                        .tracking(2)
-                        .foregroundColor(Palette.textCream)
-                        .multilineTextAlignment(.center)
-                        .lineLimit(2)
-                        .padding(.horizontal, 20)
-                        .padding(.vertical, 12)
-                        .frame(maxWidth: .infinity)
-                }
-
                 hero
-
-                Plaque {
-                    Text("Steam AppID \(game.appID) \u{00b7} \(isLaunching ? "launching through wine + dxmt\u{2026}" : "ready to play")")
-                        .font(.system(size: 13, weight: .medium, design: .monospaced))
-                        .foregroundColor(Palette.textCream)
-                        .multilineTextAlignment(.center)
-                        .padding(.horizontal, 16)
-                        .padding(.vertical, 12)
-                        .frame(maxWidth: .infinity)
-                }
-
+                label
                 HStack(spacing: 12) {
-                    CozyButton(label: isLaunching ? "starting\u{2026}" : "\u{25b6}  PLAY",
-                               tint: Palette.playGreen, tintDown: Palette.playGreenDk,
-                               action: onPlay)
+                    PixelButton(label: isLaunching ? "starting…" : "▶  PLAY",
+                                top: Palette.wineHi, bottom: Palette.wine, text: Palette.cream, fill: true,
+                                action: onPlay)
                         .disabled(isLaunching)
-                    CozyButton(label: "\u{2715}  CLOSE",
-                               tint: Palette.closeRed, tintDown: Palette.closeRedDk,
-                               action: onClose)
+                    PixelButton(label: "✕  CLOSE",
+                                top: Palette.cork, bottom: Palette.corkDk, text: Palette.cream, fill: true,
+                                action: onClose)
                 }
             }
             .padding(20)
         }
-        .ornateFrame(corner: 18, heartCorners: true)
-        .frame(width: 420, height: 460)
+        .bevel(width: 3)
+        .frame(width: 420, height: 470)
     }
 
     private var hero: some View {
-        ZStack {
-            RoundedRectangle(cornerRadius: 14).fill(Palette.bgPanelDeep)
-
-            // the animated hearts/sparkles layer, letterboxed around
-            // whatever the cover image doesn't fill -- there's real open
-            // space here, unlike the window's thin outer margin.
-            FloatingAccents()
-
-            AsyncImage(url: coverURL) { phase in
-                if case .success(let image) = phase {
-                    image.resizable().aspectRatio(contentMode: .fit).padding(14)
-                } else {
+        AsyncImage(url: coverURL) { phase in
+            if case .success(let image) = phase {
+                image.resizable().aspectRatio(contentMode: .fill)
+            } else {
+                ZStack {
+                    LinearGradient(colors: [Palette.wine, Palette.wineDk], startPoint: .topLeading, endPoint: .bottomTrailing)
                     Text(String(game.name.trimmingCharacters(in: .whitespaces).prefix(1)).uppercased())
-                        .font(.system(size: 56, weight: .heavy, design: .rounded))
-                        .foregroundColor(Palette.heart)
+                        .font(PixelFont.bold(56))
+                        .foregroundColor(Palette.cream)
                 }
             }
-
-            // corner sparkle/heart accents, echoing the reference's
-            // floating hearts and diamonds around the potion bottle.
-            VStack {
-                HStack {
-                    Text("\u{2726}").foregroundColor(Palette.gold)
-                    Spacer()
-                    Text("\u{2665}").foregroundColor(Palette.heart)
-                }
-                Spacer()
-                HStack {
-                    Text("\u{2665}").foregroundColor(Palette.heart)
-                    Spacer()
-                    Text("\u{2726}").foregroundColor(Palette.gold)
-                }
-            }
-            .font(.system(size: 18))
-            .padding(10)
         }
-        .frame(height: 200)
-        .overlay(RoundedRectangle(cornerRadius: 14).stroke(Palette.gold, lineWidth: 2.5))
-        .shadow(color: Palette.goldBright.opacity(0.35), radius: 10, x: 0, y: 4)
+        .frame(height: 190)
+        .frame(maxWidth: .infinity)
+        .clipped()
+        .bevel(raised: false, width: 3)
+    }
+
+    private var label: some View {
+        VStack(spacing: 0) {
+            // wax seal straddling the top edge of the label
+            Text("♥")
+                .font(.system(size: 13))
+                .foregroundColor(Palette.sealInk)
+                .frame(width: 30, height: 30)
+                .background(
+                    RadialGradient(colors: [Palette.seal, Palette.sealDk],
+                                   center: UnitPoint(x: 0.38, y: 0.32), startRadius: 0, endRadius: 24)
+                )
+                .bevel(width: 2)
+                .offset(y: 15)
+                .zIndex(1)
+
+            VStack(spacing: 6) {
+                Text(game.name)
+                    .font(PixelFont.bold(22))
+                    .foregroundColor(Palette.ink)
+                    .multilineTextAlignment(.center)
+                    .lineLimit(2)
+                Text("STEAM #\(game.appID)")
+                    .font(.system(size: 10, weight: .medium, design: .monospaced))
+                    .tracking(2)
+                    .foregroundColor(Palette.inkMut)
+                Divider().overlay(Palette.labelEdge).padding(.top, 5)
+                Text(isLaunching ? "launching through wine + dxmt…" : "ready to play · wine 11 + dxmt")
+                    .font(.system(size: 11, design: .monospaced))
+                    .foregroundColor(Palette.inkDim)
+                    .padding(.top, 5)
+            }
+            .padding(.horizontal, 22).padding(.top, 26).padding(.bottom, 16)
+            .frame(maxWidth: .infinity)
+            .background(LinearGradient(colors: [Palette.cream, Palette.label], startPoint: .top, endPoint: .bottom))
+            .bevel(width: 2)
+        }
     }
 }

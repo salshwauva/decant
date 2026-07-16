@@ -1,7 +1,7 @@
 import SwiftUI
 
-// the "how to install games" page, reached from the toolbar button. plain,
-// friendly steps for getting a windows game onto the shelf.
+// the "how to install games" page, reached from the toolbar. plain, friendly
+// steps for getting a windows game onto the shelf.
 struct InstallInstructionsView: View {
     var onOpenSteam: () -> Void
     @Environment(\.dismiss) private var dismiss
@@ -12,33 +12,26 @@ struct InstallInstructionsView: View {
         ("2", "find your game",
          "in steam, go to your library and pick a windows game you own. cozy single-player games work great."),
         ("3", "install it",
-         "click install and let it download. it lands in decant's bottle, fully separate from your mac steam."),
+         "click install and let it download. it lands in decant's own space, separate from your mac steam."),
         ("4", "refresh the shelf",
          "come back to decant and hit \u{201c}refresh\u{201d}. the game appears on your shelf."),
         ("5", "play",
-         "tap a game's slot, then hit play. decant launches it through wine 11 + dxmt, straight to metal on your mac."),
+         "click a game, then hit play. decant launches it through wine 11 + dxmt, straight to metal on your mac."),
     ]
 
     var body: some View {
         ZStack {
-            LinearGradient(colors: [Palette.bgOuter, Palette.bgOuterDeep],
+            LinearGradient(colors: [Palette.bgHi, Palette.bg, Palette.bgDeep],
                            startPoint: .top, endPoint: .bottom)
                 .ignoresSafeArea()
-            FloatingAccents()
 
-            VStack(spacing: 12) {
-                Plaque {
-                    HStack {
-                        Text("\u{2661} how to install games")
-                            .font(PixelFont.bold(18))
-                            .tracking(1)
-                            .foregroundColor(Palette.textCream)
-                        Spacer()
-                        CozyButton(label: "done", tint: Palette.neutral, tintDown: Palette.neutralDk) { dismiss() }
-                            .fixedSize()
-                    }
-                    .padding(.horizontal, 16)
-                    .padding(.vertical, 10)
+            VStack(spacing: 14) {
+                HStack {
+                    Text("how to install games")
+                        .font(PixelFont.bold(20))
+                        .foregroundColor(Palette.brand)
+                    Spacer()
+                    PixelButton(label: "done", top: Palette.cork, bottom: Palette.corkDk, text: Palette.cream) { dismiss() }
                 }
 
                 ScrollView {
@@ -48,10 +41,10 @@ struct InstallInstructionsView: View {
                         }
                         noteCard
                     }
-                    .padding(.vertical, 4)
+                    .padding(2)
                 }
 
-                CozyButton(label: "\u{25b6}  open steam now", tint: Palette.playGreen, tintDown: Palette.playGreenDk) {
+                PixelButton(label: "▶  open steam now", top: Palette.wineHi, bottom: Palette.wine, text: Palette.cream, fill: true) {
                     onOpenSteam()
                     dismiss()
                 }
@@ -59,54 +52,46 @@ struct InstallInstructionsView: View {
             .padding(18)
             .frame(minWidth: 460, minHeight: 520)
         }
-        .ornateFrame(corner: 18, heartCorners: true)
+        .bevel(width: 3)
     }
 
     private func stepCard(number: String, title: String, body: String) -> some View {
         HStack(alignment: .top, spacing: 12) {
             Text(number)
                 .font(PixelFont.bold(20))
-                .foregroundColor(Palette.textCream)
+                .foregroundColor(Palette.cream)
                 .frame(width: 38, height: 38)
-                .background(Circle().fill(Palette.heart))
-                .overlay(Circle().stroke(Palette.goldBright, lineWidth: 1.5))
-                .shadow(color: Palette.heart.opacity(0.4), radius: 3)
+                .background(LinearGradient(colors: [Palette.wineHi, Palette.wine], startPoint: .top, endPoint: .bottom))
+                .bevel(width: 3)
             VStack(alignment: .leading, spacing: 3) {
                 Text(title)
                     .font(PixelFont.medium(16))
                     .foregroundColor(Palette.ink)
                 Text(body)
-                    .font(.system(size: 14, design: .monospaced))
-                    .foregroundColor(Palette.inkSoft)
+                    .font(.system(size: 13, design: .monospaced))
+                    .foregroundColor(Palette.inkDim)
                     .fixedSize(horizontal: false, vertical: true)
             }
             Spacer(minLength: 0)
         }
         .padding(12)
-        .background(
-            LinearGradient(colors: [Palette.bgPanel, Palette.bgPanelDeep], startPoint: .top, endPoint: .bottom)
-        )
-        .clipShape(RoundedRectangle(cornerRadius: 12))
-        .overlay(RoundedRectangle(cornerRadius: 12).stroke(Palette.gold, lineWidth: 2))
-        .shadow(color: Palette.plaqueDk.opacity(0.15), radius: 3, x: 0, y: 2)
+        .background(LinearGradient(colors: [Palette.cream, Palette.label], startPoint: .top, endPoint: .bottom))
+        .bevel(width: 2)
     }
 
     private var noteCard: some View {
-        VStack(alignment: .leading, spacing: 4) {
+        VStack(alignment: .leading, spacing: 5) {
             Text("good to know")
                 .font(PixelFont.bold(15))
-                .foregroundColor(Palette.textCream)
+                .foregroundColor(Palette.cream)
             Text("single-player and many online games run well. games with kernel-level anti-cheat (a lot of competitive multiplayer) don't run on macos in any wrapper, that's a mac limitation, not decant's.")
-                .font(.system(size: 14, design: .monospaced))
-                .foregroundColor(Palette.textCream.opacity(0.85))
+                .font(.system(size: 13, design: .monospaced))
+                .foregroundColor(Palette.cream.opacity(0.9))
                 .fixedSize(horizontal: false, vertical: true)
         }
         .padding(12)
         .frame(maxWidth: .infinity, alignment: .leading)
-        .background(
-            LinearGradient(colors: [Palette.plaque, Palette.plaqueDk], startPoint: .top, endPoint: .bottom)
-        )
-        .clipShape(RoundedRectangle(cornerRadius: 12))
-        .overlay(RoundedRectangle(cornerRadius: 12).stroke(Palette.gold, lineWidth: 2))
+        .background(LinearGradient(colors: [Palette.wood, Palette.woodDk], startPoint: .top, endPoint: .bottom))
+        .bevel(raised: false, width: 2)
     }
 }

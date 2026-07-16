@@ -112,20 +112,20 @@ enum GameIconTheme {
     }
 
     private static func draw(initial: String, hueShift: Double, in rect: NSRect) {
-        let bg = NSColor(Palette.bgOuter)
+        let bg = NSColor(Palette.bg)
         bg.setFill()
         NSBezierPath(rect: rect).fill()
 
-        let ringColor = NSColor(Palette.gold).blended(withFraction: 0.18, of: NSColor(hue: CGFloat(hueShift / 360), saturation: 0.35, brightness: 1, alpha: 1)) ?? NSColor(Palette.gold)
+        let ringColor = NSColor(Palette.brass).blended(withFraction: 0.18, of: NSColor(hue: CGFloat(hueShift / 360), saturation: 0.35, brightness: 1, alpha: 1)) ?? NSColor(Palette.brass)
 
         let accents: [(CGFloat, CGFloat, CGFloat, String, NSColor)] = [
-            (0.16, 0.82, 0.07, "♥", NSColor(Palette.heart)),
-            (0.85, 0.83, 0.055, "♥", NSColor(Palette.heartSoft)),
-            (0.12, 0.55, 0.045, "✦", NSColor(Palette.gold)),
-            (0.88, 0.52, 0.05, "✦", NSColor(Palette.goldBright)),
-            (0.20, 0.22, 0.05, "♥", NSColor(Palette.heartSoft)),
-            (0.80, 0.20, 0.06, "♥", NSColor(Palette.heart)),
-            (0.5, 0.90, 0.04, "✦", NSColor(Palette.gold)),
+            (0.16, 0.82, 0.07, "♥", NSColor(Palette.sealDk)),
+            (0.85, 0.83, 0.055, "♥", NSColor(Palette.seal)),
+            (0.12, 0.55, 0.045, "✦", NSColor(Palette.brass)),
+            (0.88, 0.52, 0.05, "✦", NSColor(Palette.brassHi)),
+            (0.20, 0.22, 0.05, "♥", NSColor(Palette.seal)),
+            (0.80, 0.20, 0.06, "♥", NSColor(Palette.sealDk)),
+            (0.5, 0.90, 0.04, "✦", NSColor(Palette.brass)),
         ]
         for (fx, fy, fSize, glyph, color) in accents {
             drawGlyph(glyph, color: color,
@@ -135,7 +135,7 @@ enum GameIconTheme {
 
         let discRect = rect.insetBy(dx: rect.width * 0.20, dy: rect.height * 0.20)
         let discPath = NSBezierPath(ovalIn: discRect)
-        let gradient = NSGradient(colors: [NSColor(Palette.plaque), NSColor(Palette.plaqueDk)])
+        let gradient = NSGradient(colors: [NSColor(Palette.wine), NSColor(Palette.wineDk)])
         gradient?.draw(in: discPath, angle: -90)
 
         discPath.lineWidth = rect.width * 0.018
@@ -144,17 +144,17 @@ enum GameIconTheme {
 
         let innerRing = NSBezierPath(ovalIn: discRect.insetBy(dx: rect.width * 0.02, dy: rect.width * 0.02))
         innerRing.lineWidth = rect.width * 0.006
-        NSColor(Palette.goldBright).setStroke()
+        NSColor(Palette.brassHi).setStroke()
         innerRing.stroke()
 
-        drawGlyph("♥", color: NSColor(Palette.heart),
+        drawGlyph("♥", color: NSColor(Palette.sealDk),
                    at: NSPoint(x: rect.width * 0.5, y: discRect.maxY + rect.height * 0.02),
                    size: rect.width * 0.075)
 
         if let font = NSFont(name: "PixelifySans-Bold", size: rect.width * 0.26) ?? NSFont(name: "PixelifySans-Bold", size: 1) {
             let attrs: [NSAttributedString.Key: Any] = [
                 .font: NSFont(name: "PixelifySans-Bold", size: rect.width * 0.26) ?? font,
-                .foregroundColor: NSColor(Palette.textCream),
+                .foregroundColor: NSColor(Palette.cream),
             ]
             let str = NSAttributedString(string: initial, attributes: attrs)
             let strSize = str.size()
