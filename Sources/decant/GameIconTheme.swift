@@ -30,21 +30,41 @@ enum GameIcon {
         return crisp(src)
     }
 
-    // parses the ICONFILE=C:\...\<hash>.ico line out of the game's .url
-    // shortcut and rewrites the windows path onto the bottle's drive_c.
+    // locates the game's official steam icon inside the bottle. steam names
+    // each icon <sha1>.ico under Steam/steam/games and embeds that hash in
+    // both shortcut files: the .url as ICONFILE=C:\...\<hash>.ico, the
+    // .desktop as Icon=<prefix>_<hash>.0. either yields the same hash, so
+    // read whichever exists (the .url twin is often removed) rather than
+    // depending on one.
     private static func officialIcoPath(for game: Game, bottle: URL, desktop: URL) -> String? {
-        let urlFile = desktop.appendingPathComponent("\(game.name).url")
-        guard let text = try? String(contentsOf: urlFile, encoding: .utf8) else { return nil }
-        for rawLine in text.split(whereSeparator: \.isNewline) {
-            let line = rawLine.trimmingCharacters(in: .whitespaces)
-            guard line.lowercased().hasPrefix("iconfile=") else { continue }
-            let winPath = String(line.dropFirst("iconfile=".count))
-            // "C:\Program Files (x86)\..." -> "<bottle>/drive_c/Program Files (x86)/..."
-            guard let colon = winPath.firstIndex(of: ":") else { return nil }
-            let afterDrive = winPath[winPath.index(after: colon)...]          // "\Program Files..."
-            let unixTail = afterDrive.replacingOccurrences(of: "\\", with: "/")
-            let driveC = bottle.appendingPathComponent("drive_c")
-            return driveC.path + unixTail
+        let gamesDir = bottle.appendingPathComponent("drive_c/Program Files (x86)/Steam/steam/games")
+        for ext in ["desktop", "url"] {
+            let file = desktop.appendingPathComponent("\(game.name).\(ext)")
+            guard let text = try? String(contentsOf: file, encoding: .utf8) else { continue }
+            for rawLine in text.split(whereSeparator: \.isNewline) {
+                let line = rawLine.trimmingCharacters(in: .whitespaces).lowercased()
+                guard line.hasPrefix("icon=") || line.hasPrefix("iconfile=") else { continue }
+                if let hash = firstSHA1(in: line) {
+                    return gamesDir.appendingPathComponent("\(hash).ico").path
+                }
+            }
+        }
+        return nil
+    }
+
+    // the first 40-character lowercase-hex run in a string (a steam icon
+    // sha1). the shortcut's icon line also carries a short numeric prefix
+    // and a ".0"/".ico" suffix, which this skips over.
+    private static func firstSHA1(in text: String) -> String? {
+        let hex = Set("0123456789abcdef")
+        var run = ""
+        for ch in text {
+            if hex.contains(ch) {
+                run.append(ch)
+                if run.count == 40 { return run }
+            } else {
+                run = ""
+            }
         }
         return nil
     }
