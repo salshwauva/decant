@@ -136,7 +136,9 @@ struct ContentView: View {
                 .onPreferenceChange(LibraryHeightKey.self) { libraryHeight = $0 }
             }
         }
-        .padding(.horizontal, 4)
+        .padding(14)
+        .background(Color.white.opacity(0.32))
+        .bevel(raised: false, width: 3)
     }
 
     private var rackHead: some View {

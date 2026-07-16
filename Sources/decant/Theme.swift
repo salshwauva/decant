@@ -45,10 +45,10 @@ enum Palette {
     static let plateHi   = Color(hex: 0xeec3c6)
     static let plateLo   = Color(hex: 0xd18f97)
 
-    // mauve cork (refresh / close)
-    static let cork      = Color(hex: 0xb87a99)
-    static let corkDk    = Color(hex: 0x8a5273)
-    static let corkEdge  = Color(hex: 0x5f3450)
+    // cherry red (refresh / close / secondary)
+    static let cork      = Color(hex: 0xd33f4d)
+    static let corkDk    = Color(hex: 0xa0232f)
+    static let corkEdge  = Color(hex: 0x7a1922)
 
     // near-white pink bottle-label
     static let label     = Color(hex: 0xfdf3f8)
