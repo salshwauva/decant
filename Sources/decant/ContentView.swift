@@ -27,14 +27,6 @@ struct ContentView: View {
         Array(repeating: GridItem(.fixed(cellWidth), spacing: gridSpacing), count: columnCount)
     }
 
-    // fill only the last partial row, so the grid reads as complete without
-    // padding out extra empty rows that would fight the size-to-content rack.
-    private var emptySlotCount: Int {
-        guard !games.isEmpty else { return 0 }
-        let remainder = games.count % columnCount
-        return remainder == 0 ? 0 : columnCount - remainder
-    }
-
     var body: some View {
         ZStack {
             LinearGradient(colors: [Palette.bgHi, Palette.bg, Palette.bgDeep],
@@ -45,6 +37,7 @@ struct ContentView: View {
                 header
                 toolbar
                 rack
+                installHelp
                 ledger
             }
             .padding(16)
@@ -100,11 +93,21 @@ struct ContentView: View {
     private var toolbar: some View {
         HStack(spacing: 10) {
             PixelButton(label: "▶  open steam", top: Palette.wineHi, bottom: Palette.wine, text: Palette.cream, action: openSteam)
-            PixelButton(label: "＋  how to install games", top: Palette.brassHi, bottom: Palette.brass, text: Palette.brassInk) {
+            // adding a game means installing it in steam, so this opens the
+            // steam client where the library and store live.
+            PixelButton(label: "＋  add a game", top: Palette.brassHi, bottom: Palette.brass, text: Palette.brassInk, action: openSteam)
+            Spacer()
+            PixelButton(label: "⟳  refresh", top: Palette.cork, bottom: Palette.corkDk, text: Palette.cream, action: refresh)
+        }
+    }
+
+    // the help link, sitting below the cellar rather than in the top toolbar.
+    private var installHelp: some View {
+        HStack {
+            PixelButton(label: "?  how to install games", top: Palette.cork, bottom: Palette.corkDk, text: Palette.cream) {
                 showingInstructions = true
             }
             Spacer()
-            PixelButton(label: "⟳  refresh", top: Palette.cork, bottom: Palette.corkDk, text: Palette.cream, action: refresh)
         }
     }
 
@@ -117,14 +120,11 @@ struct ContentView: View {
                 emptyShelf
             } else {
                 ScrollView(.vertical, showsIndicators: true) {
-                    LazyVGrid(columns: columns, spacing: gridSpacing) {
+                    LazyVGrid(columns: columns, alignment: .leading, spacing: gridSpacing) {
                         ForEach(games) { game in
                             ItemSlot(game: game, isLaunching: launching == game.appID) {
                                 selectedGame = game
                             }
-                        }
-                        ForEach(0..<emptySlotCount, id: \.self) { _ in
-                            EmptyItemSlot()
                         }
                     }
                     .padding(.vertical, 4)
@@ -138,7 +138,8 @@ struct ContentView: View {
         }
         .padding(15)
         .background(
-            LinearGradient(colors: [Palette.wood, Palette.woodDk], startPoint: .top, endPoint: .bottom)
+            LinearGradient(colors: [Palette.wood.opacity(0.5), Palette.woodDk.opacity(0.5)],
+                           startPoint: .top, endPoint: .bottom)
         )
         .bevel(raised: false, width: 3)
     }
@@ -157,21 +158,17 @@ struct ContentView: View {
     }
 
     private var emptyShelf: some View {
-        VStack(spacing: 14) {
-            HStack(spacing: gridSpacing) {
-                ForEach(0..<columnCount, id: \.self) { _ in
-                    EmptyItemSlot().frame(width: cellWidth)
-                }
-            }
+        VStack(spacing: 10) {
             Text("no games yet")
                 .font(PixelFont.bold(20))
                 .foregroundColor(Palette.cream)
-            Text("open steam, install a windows game, then hit refresh.\nit shows up on the rack here.")
+            Text("hit \u{201c}add a game\u{201d}, install a windows game in steam,\nthen refresh. it shows up on the rack here.")
                 .multilineTextAlignment(.center)
                 .font(.system(size: 12, design: .monospaced))
-                .foregroundColor(Palette.cream.opacity(0.8))
+                .foregroundColor(Palette.cream.opacity(0.85))
         }
-        .padding(.vertical, 24)
+        .frame(maxWidth: .infinity)
+        .padding(.vertical, 40)
     }
 
     // MARK: ledger status
@@ -279,21 +276,6 @@ private struct ItemSlot: View {
         .animation(.easeOut(duration: 0.14), value: hovering)
         .onHover { hovering = $0 }
         .disabled(isLaunching)
-    }
-}
-
-// MARK: - Empty niche (open shelf space)
-
-private struct EmptyItemSlot: View {
-    var body: some View {
-        ZStack {
-            Rectangle().fill(Palette.niche.opacity(0.35))
-            Rectangle()
-                .strokeBorder(style: StrokeStyle(lineWidth: 2, dash: [5, 4]))
-                .foregroundColor(Palette.emptyBd)
-            Text("＋").font(.system(size: 20)).foregroundColor(Palette.emptyBd)
-        }
-        .aspectRatio(16.0/9.0, contentMode: .fit)
     }
 }
 
