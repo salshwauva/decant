@@ -80,12 +80,6 @@ struct ContentView: View {
                     .foregroundColor(Palette.inkMut)
             }
             Spacer()
-            Text("apple silicon")
-                .font(.system(size: 11, design: .monospaced))
-                .foregroundColor(Palette.brassInk)
-                .padding(.horizontal, 11).padding(.vertical, 6)
-                .background(LinearGradient(colors: [Palette.brassHi, Palette.brass], startPoint: .top, endPoint: .bottom))
-                .bevel(width: 2)
         }
     }
 
