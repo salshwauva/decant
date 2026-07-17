@@ -11,6 +11,9 @@ enum Assets {
     // the pixel "D" decanter monogram (transparent), for the header brand.
     static let logoD: NSImage? = image("logo-d.png")
 
+    // the pixel wine-cellar backdrop, drawn faintly behind the game shelf.
+    static let cellarBG: NSImage? = image("cellar-bg.jpg")
+
     // the pour clip as a keyed transparent frame sequence, preloaded once so
     // playback doesn't hit disk every frame.
     static let pourFrames: [NSImage] = (0..<60).compactMap {

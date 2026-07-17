@@ -17,6 +17,7 @@ cp "Resources/AppIcon.icns" "$APP/Contents/Resources/AppIcon.icns"
 mkdir -p "$APP/Contents/Resources/Fonts"
 cp Resources/Fonts/*.ttf "$APP/Contents/Resources/Fonts/"
 cp Resources/logo-d.png "$APP/Contents/Resources/logo-d.png"
+cp Resources/cellar-bg.jpg "$APP/Contents/Resources/cellar-bg.jpg"
 mkdir -p "$APP/Contents/Resources/pour"
 cp Resources/pour/*.png "$APP/Contents/Resources/pour/"
 
