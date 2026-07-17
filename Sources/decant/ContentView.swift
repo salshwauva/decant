@@ -137,30 +137,26 @@ struct ContentView: View {
                     })
                 }
                 .frame(height: min(libraryHeight, libraryCap))
+                .background(cellarBackdrop)
+                .clipShape(Rectangle())    // keep the fill image inside the games area
                 .onPreferenceChange(LibraryHeightKey.self) { libraryHeight = $0 }
             }
         }
         .padding(14)
-        .background(cellarBackdrop)
-        .clipShape(Rectangle())        // keep the fill image inside the panel
+        .background(Color.white.opacity(0.30))
         .bevel(raised: false, width: 3)
     }
 
-    // a faint pixel wine-cellar behind the shelf: a light wash over the pink,
-    // then the cellar image at low opacity so it reads as texture and never
-    // competes with the game tiles.
-    private var cellarBackdrop: some View {
-        ZStack {
-            Color.white.opacity(0.30)
-            if let bg = Assets.cellarBG {
-                Image(nsImage: bg)
-                    .resizable()
-                    .interpolation(.none)
-                    .aspectRatio(contentMode: .fill)
-                    .opacity(0.22)
-            }
+    // a faint pixel wine-cellar, drawn only behind the game tiles so it reads
+    // as texture there without touching the section header or the frame.
+    @ViewBuilder private var cellarBackdrop: some View {
+        if let bg = Assets.cellarBG {
+            Image(nsImage: bg)
+                .resizable()
+                .interpolation(.none)
+                .aspectRatio(contentMode: .fill)
+                .opacity(0.22)
         }
-        .clipped()
     }
 
     private var rackHead: some View {
