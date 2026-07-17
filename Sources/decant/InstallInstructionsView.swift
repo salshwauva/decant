@@ -5,6 +5,7 @@ import SwiftUI
 struct InstallInstructionsView: View {
     var onOpenSteam: () -> Void
     @Environment(\.dismiss) private var dismiss
+    @State private var showingEngineSetup = false
 
     private let steps: [(String, String, String)] = [
         ("1", "open steam",
@@ -36,6 +37,7 @@ struct InstallInstructionsView: View {
 
                 ScrollView {
                     VStack(spacing: 12) {
+                        engineLink
                         ForEach(steps, id: \.0) { step in
                             stepCard(number: step.0, title: step.1, body: step.2)
                         }
@@ -53,6 +55,35 @@ struct InstallInstructionsView: View {
             .frame(minWidth: 460, minHeight: 520)
         }
         .bevel(width: 3)
+        .sheet(isPresented: $showingEngineSetup) { EngineSetupView() }
+    }
+
+    // links out to the separate one-time engine setup. these game steps
+    // assume the wine engine is already up; if it isn't, start here.
+    private var engineLink: some View {
+        Button { showingEngineSetup = true } label: {
+            HStack(spacing: 10) {
+                VStack(alignment: .leading, spacing: 2) {
+                    Text("first time on this machine?")
+                        .font(PixelFont.medium(14))
+                        .foregroundColor(Palette.cream)
+                    Text("the wine engine has to be set up once before any of this works")
+                        .font(.system(size: 11, design: .monospaced))
+                        .foregroundColor(Palette.cream.opacity(0.9))
+                        .fixedSize(horizontal: false, vertical: true)
+                        .multilineTextAlignment(.leading)
+                }
+                Spacer(minLength: 6)
+                Text("set up the engine  →")
+                    .font(.system(size: 11, weight: .bold, design: .monospaced))
+                    .foregroundColor(Palette.cream)
+            }
+            .padding(12)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .background(LinearGradient(colors: [Palette.cork, Palette.corkDk], startPoint: .top, endPoint: .bottom))
+            .bevel(width: 2)
+        }
+        .buttonStyle(.plain)
     }
 
     private func stepCard(number: String, title: String, body: String) -> some View {
