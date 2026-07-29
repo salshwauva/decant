@@ -21,6 +21,10 @@ cp Resources/cellar-bg.jpg "$APP/Contents/Resources/cellar-bg.jpg"
 mkdir -p "$APP/Contents/Resources/pour"
 cp Resources/pour/*.png "$APP/Contents/Resources/pour/"
 
+HEARTH_ENGINE_DIR="$HOME/Library/Application Support/hearth/engine"
+mkdir -p "$HEARTH_ENGINE_DIR"
+cp scripts/decant-launch.sh "$HEARTH_ENGINE_DIR/decant-launch.sh"
+
 cat > "$APP/Contents/Info.plist" <<'PLIST'
 <?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">

@@ -134,16 +134,6 @@ enum EngineManager {
         ]
     }
 
-    // env for launching a game: route the direct3d dlls to wine's builtin
-    // versions, which are the gptk ones backed by d3dmetal, so directx lands
-    // on metal. hush the metal hud by default.
-    static func gameEnv(_ bottle: URL) -> [String: String] {
-        var e = bottleEnv(bottle)
-        e["WINEDLLOVERRIDES"] = "mscoree=d;mshtml=d;dxgi,d3d9,d3d10core,d3d11,d3d12,d3d12core=b"
-        e["MTL_HUD_ENABLED"] = "0"
-        return e
-    }
-
     // launch a process without waiting (for long-running guis like the steam
     // client or a game). returns the child pid.
     @discardableResult
