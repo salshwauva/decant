@@ -1,10 +1,9 @@
 // swift-tools-version:5.9
 import PackageDescription
 
-// decant: a cozy launcher for windows-only steam games on apple silicon.
-// it drives an existing wine + game porting toolkit stack, it does not
-// emulate anything itself. built with swiftpm so it compiles against the
-// command line tools sdk without needing a full xcode project.
+// decant: cozy launcher for windows-only steam games on apple silicon.
+// monorepo: engine/ (wine 11 + dxmt scripts) + this swiftui front end.
+// does not emulate; built with swiftpm against the command line tools sdk.
 let package = Package(
     name: "decant",
     platforms: [.macOS(.v13)],

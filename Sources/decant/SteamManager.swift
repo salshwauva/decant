@@ -1,8 +1,9 @@
 import Foundation
+import CryptoKit
 
 // a game decant knows about: its steam app id and display name, read from
 // the windows steam install inside the bottle.
-struct Game: Identifiable {
+struct Game: Identifiable, Equatable {
     var id: String { appID }
     let appID: String
     let name: String
@@ -13,6 +14,15 @@ struct Game: Identifiable {
 // steam's own window; decant just sets the table.
 enum SteamManager {
     static let steamSetupURL = "https://cdn.cloudflare.steamstatic.com/client/installer/SteamSetup.exe"
+
+    // optional integrity pin for SteamSetup.exe. empty means mz-header only.
+    // set DECANT_STEAMSETUP_SHA256 to enforce a full hash after download.
+    static var steamSetupSHA256: String? {
+        if let s = ProcessInfo.processInfo.environment["DECANT_STEAMSETUP_SHA256"], !s.isEmpty {
+            return s.lowercased()
+        }
+        return nil
+    }
 
     static func steamDir(_ bottle: URL) -> URL {
         bottle.appendingPathComponent("drive_c/Program Files (x86)/Steam", isDirectory: true)
@@ -31,51 +41,98 @@ enum SteamManager {
         if !FileManager.default.fileExists(atPath: dl.path) {
             try FileManager.default.createDirectory(
                 at: dl.deletingLastPathComponent(), withIntermediateDirectories: true)
-            guard let url = URL(string: steamSetupURL),
-                  let data = try? Data(contentsOf: url)
-            else { throw DecantError.launch("could not download SteamSetup.exe") }
+            guard let url = URL(string: steamSetupURL) else {
+                throw DecantError.launch("bad SteamSetup url")
+            }
+            let data: Data
+            do {
+                data = try Data(contentsOf: url)
+            } catch {
+                throw DecantError.launch("could not download SteamSetup.exe: \(error.localizedDescription)")
+            }
+            try validateSteamSetup(data)
             try data.write(to: dl)
+            DecantLog.line("downloaded SteamSetup.exe (\(data.count) bytes)")
+        } else {
+            // re-check cached installer
+            if let data = try? Data(contentsOf: dl) {
+                try validateSteamSetup(data)
+            }
         }
         let r = try EngineManager.run(engine.wine, [dl.path, "/S"], extraEnv: EngineManager.bottleEnv(bottle))
         if !isInstalled(bottle) {
-            throw DecantError.launch("steam install did not produce steam.exe: \(r.err)")
+            throw DecantError.launch("steam install did not produce steam.exe: \(r.err.isEmpty ? r.out : r.err)")
         }
     }
 
-    // the launch wrapper that bakes in the working wine 11 + dxmt env,
-    // the webhelper wrapper, the flag set, and the virtual desktop.
-    static var launchScript: URL {
-        EnginePaths.support.appendingPathComponent("engine/decant-launch.sh")
+    private static func validateSteamSetup(_ data: Data) throws {
+        guard data.count > 64, data[0] == 0x4D, data[1] == 0x5A else {
+            throw DecantError.launch("SteamSetup.exe is not a PE (missing MZ header)")
+        }
+        if let expected = steamSetupSHA256 {
+            let digest = SHA256.hash(data: data)
+            let hex = digest.map { String(format: "%02x", $0) }.joined()
+            guard hex == expected else {
+                throw DecantError.launch("SteamSetup.exe sha256 mismatch (got \(hex), expected \(expected))")
+            }
+        }
     }
 
-    // open the steam client so the user can sign in and install games.
-    static func launchClient(_ bottle: URL, engine: Engine) throws {
-        clearDumpsIfBig(bottle)
-        try EngineManager.spawn("/bin/bash", [launchScript.path, "steam"])
+    static var launchScript: URL { EnginePaths.launchScript }
+
+    private static func requireLaunchScript() throws -> URL {
+        let url = launchScript
+        let fm = FileManager.default
+        guard fm.fileExists(atPath: url.path) else {
+            throw DecantError.launch(
+                "launch script missing at \(url.path). run ./scripts/bundle.sh from the monorepo")
+        }
+        return url
     }
 
-    // launch an owned, installed game by app id, through steam, with the
-    // direct3d-to-metal env in place.
-    static func launchGame(appID: String, bottle: URL, engine: Engine) throws {
-        clearDumpsIfBig(bottle)
-        try EngineManager.spawn("/bin/bash", [launchScript.path, "play", appID])
+    // result message for the ui (e.g. dump trim note). throws on hard failure.
+    @discardableResult
+    static func launchClient(_ bottle: URL, engine: Engine) throws -> String? {
+        let note = try clearDumpsIfBig(bottle)
+        let script = try requireLaunchScript()
+        _ = try EngineManager.spawn("/bin/bash", [script.path, "steam"])
+        DecantLog.line("launched steam client")
+        return note
     }
 
-    // hand a game off to steam's own uninstall flow (steam://uninstall/<id>).
-    // decant doesn't manage installs itself, so removing a game happens in
-    // steam, same as installing.
+    @discardableResult
+    static func launchGame(appID: String, bottle: URL, engine: Engine) throws -> String? {
+        guard !appID.isEmpty, appID.allSatisfy({ $0.isNumber }) else {
+            throw DecantError.launch("invalid steam app id: \(appID)")
+        }
+        let note = try clearDumpsIfBig(bottle)
+        let script = try requireLaunchScript()
+        _ = try EngineManager.spawn("/bin/bash", [script.path, "play", appID])
+        DecantLog.line("launched game appid=\(appID)")
+        return note
+    }
+
     static func uninstallGame(appID: String, bottle: URL, engine: Engine) throws {
-        try EngineManager.spawn("/bin/bash", [launchScript.path, "uninstall", appID])
+        guard !appID.isEmpty, appID.allSatisfy({ $0.isNumber }) else {
+            throw DecantError.launch("invalid steam app id: \(appID)")
+        }
+        let script = try requireLaunchScript()
+        _ = try EngineManager.spawn("/bin/bash", [script.path, "uninstall", appID])
+        DecantLog.line("uninstall requested appid=\(appID)")
     }
 
-    // clear crash dumps before launching if they've grown past the cap, so a
-    // crash-loop can never fill the disk the way it did during bring-up.
-    private static func clearDumpsIfBig(_ bottle: URL) {
+    // clear crash dumps before launching if they've grown past the cap.
+    // returns a short note when bytes were freed.
+    private static func clearDumpsIfBig(_ bottle: URL) throws -> String? {
+        let report = Housekeeping.evaluateDumps(bottle)
+        guard report.overCap else { return nil }
         let freed = Housekeeping.trimDumps(bottle)
         if freed > 0 {
-            FileHandle.standardError.write(
-                Data("decant: cleared \(Housekeeping.human(freed)) of crash dumps\n".utf8))
+            let note = "cleared \(Housekeeping.human(freed)) of crash dumps"
+            DecantLog.line(note)
+            return note
         }
+        return nil
     }
 
     // games installed in the bottle, read from steam's appmanifest files.
@@ -107,7 +164,7 @@ enum SteamManager {
 
     // steam ships shared runtimes/redistributables as "apps" in steamapps;
     // they aren't games and shouldn't land on the shelf.
-    private static func isSupportPackage(appID: String, name: String) -> Bool {
+    static func isSupportPackage(appID: String, name: String) -> Bool {
         let junkIDs: Set<String> = ["228980", "1070560", "1391110", "1628350"]
         if junkIDs.contains(appID) { return true }
         let n = name.lowercased()
@@ -120,7 +177,7 @@ enum SteamManager {
 
     // additional steam library folders declared in libraryfolders.vdf, mapped
     // from windows paths back to the bottle's drive_c.
-    private static func extraLibraryFolders(_ bottle: URL) -> [URL] {
+    static func extraLibraryFolders(_ bottle: URL) -> [URL] {
         let vdf = steamDir(bottle).appendingPathComponent("steamapps/libraryfolders.vdf")
         guard let txt = try? String(contentsOf: vdf, encoding: .utf8) else { return [] }
         var out: [URL] = []

@@ -1,4 +1,5 @@
 import SwiftUI
+import AppKit
 
 struct ContentView: View {
     @State private var status: EngineStatus = .noEngine
@@ -6,6 +7,10 @@ struct ContentView: View {
     @State private var showingInstructions = false
     @State private var launching: String? = nil
     @State private var selectedGame: Game? = nil
+    // user-visible feedback: errors (red) and soft notes (dump trim, etc.)
+    @State private var banner: String? = nil
+    @State private var bannerIsError = true
+    @State private var dumpSummary: String? = nil
 
     private var bottle: URL { EnginePaths.bottle(EngineManager.defaultBottle) }
 
@@ -35,6 +40,9 @@ struct ContentView: View {
 
             VStack(spacing: 14) {
                 header
+                if let banner {
+                    bannerBar(banner, error: bannerIsError)
+                }
                 toolbar
                 rack
                 installHelp
@@ -58,10 +66,8 @@ struct ContentView: View {
         }
     }
 
-    private var engineReady: Bool {
-        if case .noEngine = status { return false }
-        return true
-    }
+    // green only when wine + bottle are both present.
+    private var engineFullyReady: Bool { status.isFullyReady }
 
     // MARK: header
 
@@ -183,7 +189,7 @@ struct ContentView: View {
             Text("no games yet")
                 .font(PixelFont.bold(20))
                 .foregroundColor(Palette.ink)
-            Text("hit \u{201c}add a game\u{201d}, install a windows game in steam,\nthen refresh. it shows up here.")
+            Text(emptyShelfHint)
                 .multilineTextAlignment(.center)
                 .font(.system(size: 12, design: .monospaced))
                 .foregroundColor(Palette.inkMut)
@@ -192,18 +198,46 @@ struct ContentView: View {
         .padding(.vertical, 40)
     }
 
+    private var emptyShelfHint: String {
+        switch status {
+        case .noEngine:
+            return "engine not installed yet.\nfrom the monorepo:  bash engine/install.sh"
+        case .engineNoBottle:
+            return "engine is in, but there is no bottle yet.\nrun:  decant --init-bottle  then  decant --install-steam"
+        case .ready:
+            return "hit \u{201c}add a game\u{201d}, install a windows game in steam,\nthen refresh. it shows up here."
+        }
+    }
+
     // MARK: ledger status
 
     private var ledger: some View {
         HStack(spacing: 10) {
             Circle()
-                .fill(engineReady ? Palette.pip : Palette.wine)
+                .fill(engineFullyReady ? Palette.pip : Palette.wine)
                 .frame(width: 9, height: 9)
-                .shadow(color: (engineReady ? Palette.pip : Palette.wine).opacity(0.7), radius: 4)
-            Text(engineReady ? "engine: ready" : status.headline)
-                .font(.system(size: 12, design: .monospaced))
-                .foregroundColor(Palette.inkDim)
+                .shadow(color: (engineFullyReady ? Palette.pip : Palette.wine).opacity(0.7), radius: 4)
+            VStack(alignment: .leading, spacing: 2) {
+                Text(status.headline)
+                    .font(.system(size: 12, design: .monospaced))
+                    .foregroundColor(Palette.inkDim)
+                if let dumpSummary {
+                    Text(dumpSummary)
+                        .font(.system(size: 10, design: .monospaced))
+                        .foregroundColor(Palette.inkMut)
+                }
+            }
             Spacer()
+            Button {
+                NSWorkspace.shared.open(DecantLog.fileURL)
+            } label: {
+                Text("log")
+                    .font(.system(size: 10, weight: .medium, design: .monospaced))
+                    .foregroundColor(Palette.inkMut)
+                    .underline()
+            }
+            .buttonStyle(.plain)
+            .help(DecantLog.fileURL.path)
         }
         .padding(.horizontal, 14).padding(.vertical, 10)
         .background(
@@ -212,36 +246,97 @@ struct ContentView: View {
         .bevel(raised: false, width: 2)
     }
 
+    private func bannerBar(_ text: String, error: Bool) -> some View {
+        HStack(alignment: .top, spacing: 8) {
+            Text(error ? "!" : "i")
+                .font(PixelFont.bold(14))
+                .foregroundColor(error ? Palette.cream : Palette.ink)
+            Text(text)
+                .font(.system(size: 11, design: .monospaced))
+                .foregroundColor(error ? Palette.cream : Palette.inkDim)
+                .fixedSize(horizontal: false, vertical: true)
+            Spacer(minLength: 0)
+            Button {
+                banner = nil
+            } label: {
+                Text("✕")
+                    .font(.system(size: 11, design: .monospaced))
+                    .foregroundColor(error ? Palette.cream.opacity(0.8) : Palette.inkMut)
+            }
+            .buttonStyle(.plain)
+        }
+        .padding(.horizontal, 12).padding(.vertical, 8)
+        .background(
+            LinearGradient(
+                colors: error ? [Palette.wineHi, Palette.wine] : [Palette.cork, Palette.corkDk],
+                startPoint: .top, endPoint: .bottom)
+        )
+        .bevel(width: 2)
+    }
+
     // MARK: actions
 
     private func refresh() {
         status = EngineManager.status()
         games = SteamManager.installedGames(bottle)
+        if case .ready(_, let b) = status {
+            let report = Housekeeping.evaluateDumps(b)
+            dumpSummary = report.summary
+        } else {
+            dumpSummary = nil
+        }
         // steam-under-wine drops a fresh, genericly-iconed shortcut on the
         // real desktop for any newly installed game, so this re-applies
         // the official steam icon and clean name every refresh.
         DesktopShortcuts.retheme(games, bottle: bottle)
     }
 
+    private func showError(_ error: Error) {
+        bannerIsError = true
+        banner = String(describing: error)
+        DecantLog.line("ui error: \(error)")
+    }
+
+    private func showNote(_ text: String) {
+        bannerIsError = false
+        banner = text
+    }
+
     private func openSteam() {
-        guard let engine = Engine.detect() else { return }
-        try? SteamManager.launchClient(bottle, engine: engine)
+        do {
+            let (engine, b) = try EngineManager.requireReady()
+            let note = try SteamManager.launchClient(b, engine: engine)
+            if let note { showNote(note) } else { banner = nil }
+        } catch {
+            showError(error)
+        }
     }
 
     private func play(_ game: Game) {
-        guard let engine = Engine.detect() else { return }
-        launching = game.appID
-        try? SteamManager.launchGame(appID: game.appID, bottle: bottle, engine: engine)
-        // clear the launching pip after a moment (the game spins up detached)
-        DispatchQueue.main.asyncAfter(deadline: .now() + 6) {
-            if launching == game.appID { launching = nil }
+        do {
+            let (engine, b) = try EngineManager.requireReady()
+            launching = game.appID
+            let note = try SteamManager.launchGame(appID: game.appID, bottle: b, engine: engine)
+            if let note { showNote(note) } else { banner = nil }
+            // clear the launching pip after a moment (the game spins up detached)
+            DispatchQueue.main.asyncAfter(deadline: .now() + 6) {
+                if launching == game.appID { launching = nil }
+            }
+        } catch {
+            launching = nil
+            showError(error)
         }
     }
 
     private func uninstall(_ game: Game) {
-        guard let engine = Engine.detect() else { return }
-        try? SteamManager.uninstallGame(appID: game.appID, bottle: bottle, engine: engine)
-        selectedGame = nil
+        do {
+            let (engine, b) = try EngineManager.requireReady()
+            try SteamManager.uninstallGame(appID: game.appID, bottle: b, engine: engine)
+            selectedGame = nil
+            banner = nil
+        } catch {
+            showError(error)
+        }
     }
 }
 

@@ -3,3 +3,10 @@ build/
 *.xcodeproj
 .DS_Store
 .swiftpm/
+# engine build / runtime artefacts (never track)
+engine/vendor/
+engine/wrapper/steamwebhelper.exe
+engine/wrapper/*.o
+engine/**/*.dll
+engine/**/*.so
+engine/**/*.exe

@@ -6,6 +6,17 @@ import Foundation
 // launch, if accumulated crash dumps cross a cap, clear them. dumps are pure
 // crash fallout, steam recreates the folder on demand, so deleting is safe.
 enum Housekeeping {
+    struct DumpReport: Equatable {
+        let bytes: UInt64
+        let cap: UInt64
+        let dirs: [URL]
+        var overCap: Bool { bytes >= cap }
+        var summary: String {
+            "dumps \(human(bytes)) / cap \(human(cap))"
+                + (overCap ? " (over cap)" : "")
+        }
+    }
+
     // clear dumps once their total crosses this. 10 GiB by default (the size
     // that prompted this guard); override with DECANT_DUMP_CAP_GB.
     static var dumpCapBytes: UInt64 {
@@ -55,16 +66,21 @@ enum Housekeeping {
         dumpDirs(bottle).reduce(0) { $0 + dirSize($1) }
     }
 
+    static func evaluateDumps(_ bottle: URL, cap: UInt64 = dumpCapBytes) -> DumpReport {
+        let dirs = dumpDirs(bottle)
+        let total = dirs.reduce(0) { $0 + dirSize($1) }
+        return DumpReport(bytes: total, cap: cap, dirs: dirs)
+    }
+
     // if dumps have crossed the cap, delete them. returns bytes freed (0 if
     // under the cap or nothing to clear).
     @discardableResult
     static func trimDumps(_ bottle: URL, cap: UInt64 = dumpCapBytes) -> UInt64 {
-        let dirs = dumpDirs(bottle)
-        let total = dirs.reduce(0) { $0 + dirSize($1) }
-        guard total >= cap else { return 0 }
+        let report = evaluateDumps(bottle, cap: cap)
+        guard report.overCap else { return 0 }
         let fm = FileManager.default
-        for d in dirs { try? fm.removeItem(at: d) }
-        return total
+        for d in report.dirs { try? fm.removeItem(at: d) }
+        return report.bytes
     }
 
     static func human(_ bytes: UInt64) -> String {

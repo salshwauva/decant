@@ -1,0 +1,64 @@
+decant engine
+=============
+
+This directory is the wine 11 + DXMT install/launch recipe used by the
+decant macOS app. It lives in the same git tree as the SwiftUI front end.
+
+Upstream base
+-------------
+Derived from steam-on-m1-wine
+Copyright (c) 2026 notpop
+Licensed under the MIT License (see LICENSE).
+Source: https://github.com/notpop/steam-on-m1-wine
+Pinned base revision when imported: 540037e
+
+Local changes on top of that base include:
+  - default paths under ~/Library/Application Support/decant
+  - writable Wine deploy via cp -RX into engines/wine11
+  - bison/flex on PATH for Wine rebuilds
+  - skipping the separate "Steam on M1 Wine.app" dock installer
+    (decant.app is the product UI)
+  - deploy of this recipe into Application Support on install
+  - prefix-scoped process cleanup (wineserver -k + WINEPREFIX filter)
+  - version pins recorded in engine/PINS.md
+
+See engine/PINS.md for Wine / DXMT / LLVM / recipe SHAs.
+
+================================================================================
+Third-party components
+================================================================================
+
+This recipe orchestrates third-party software. THIS TREE NEITHER
+REDISTRIBUTES NOR BUNDLES THEIR BINARIES OR FULL SOURCE — components
+are installed through upstream channels or downloaded at setup time.
+
+Wine (stable)
+    License: LGPL-2.1-or-later
+    Source:  https://www.winehq.org/
+    Notes:   Installed via Homebrew Cask wine-stable, then copied into
+             decant's engine home. The optional -fvisibility=default
+             rebuild clones Wine source at tag wine-11.0 and replaces
+             only winemac.so.
+
+Winetricks
+    License: LGPL-2.1-or-later
+    Source:  https://github.com/Winetricks/winetricks
+
+DXMT
+    License: MIT License
+    Copyright: (c) 2023 Feifan He
+    Source:  https://github.com/3Shain/dxmt
+    Notes:   scripts/04-install-dxmt.sh fetches a release tarball.
+             scripts/07-build-dxmt-fork.sh builds notpop/dxmt branch
+             debug/present-path-tracing (mutable branch; pin when possible).
+
+GStreamer runtime
+    License: LGPL-2.1
+    Source:  https://gstreamer.freedesktop.org/
+
+Steam client (installed on demand)
+    License: Steam Subscriber Agreement
+    Notes:   Fetched from Valve's CDN at runtime.
+
+Build-time tools (Homebrew, mingw-w64, LLVM 15, meson, etc.) are invoked
+by the scripts and are not redistributed in this repository.

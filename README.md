@@ -1,29 +1,60 @@
 # decant
 
-a cozy launcher for windows-only steam games on apple silicon. it installs
-and launches the games you already own, wrapped in a warm pixel ui.
+a cozy launcher for windows-only steam games on apple silicon. one project:
+the **engine** (wine 11 + dxmt install and launch scripts) and the **ui**
+(swiftui shelf that drives it).
 
-decant does not emulate anything. the hard work (running x86-64, the windows
-api, directx) is done by tools that already exist:
+decant does not emulate a cpu. the hard work is done by tools that already
+exist:
 
 - rosetta 2 translates the x86-64 instructions (built into macos)
 - wine provides the windows api and loads the program
 - dxmt turns the game's directx calls into metal
 
-the catch on macos 26: the off-the-shelf versions of this stack (game
-porting toolkit, whisky, crossover, mythic) all fell over. so decant runs on
-a home-built engine: wine 11 with a rebuilt winemac driver and the dxmt
-fork's dlls, kept in `~/Library/Application Support/hearth`. that engine is a
-one-time setup done by hand; the app just detects and drives it.
+on macos 26, off-the-shelf stacks (game porting toolkit, whisky, crossover,
+mythic) fell over. the engine half of this repo builds a working free path:
+wine 11 with a rebuilt winemac driver and dxmt, under
+`~/Library/Application Support/decant`. the ui detects that stack, installs
+windows steam into a bottle, lists your games, and launches them.
 
-decant drives that stack: it sets up a bottle (an isolated windows world),
-installs windows steam into it, finds the games you own, and launches them.
-think of it as a cozy front end over your own wine engine, the same kind of
-engine whisky and crossover wrap.
+## layout
 
-this is the opposite end from wisp. wisp emulates a cpu from scratch to run a
-toy program. decant leans on mature engines to run real games. different
-goals, same household.
+```
+decant/
+  engine/           # one-time wine + dxmt + steam bottle setup (scripts)
+  Sources/decant/   # swiftui app
+  scripts/          # bundle.sh, decant-launch.sh
+  Resources/        # fonts, pour frames, icons
+```
+
+the engine scripts started from
+[notpop/steam-on-m1-wine](https://github.com/notpop/steam-on-m1-wine) (MIT,
+base `540037e`) and live here as the owned recipe. attribution:
+`engine/NOTICE`.
+
+## setup
+
+### 1. build the engine (once, ~1 hour first run)
+
+```bash
+bash engine/install.sh
+```
+
+that installs wine, creates the bottle, wires steam + dxmt, and deploys the
+recipe under Application Support. `--minimal` stops before the long dxmt/wine
+rebuilds if you only need the steam ui.
+
+### 2. build the ui
+
+needs the swift toolchain from the command line tools. no full xcode project.
+
+```bash
+./scripts/bundle.sh        # builds build/decant.app, deploys launch scripts
+open build/decant.app
+```
+
+if the engine is missing, the app reports it as not ready and points at the
+setup guide (`engine/install.sh`).
 
 ## scope and honesty
 
@@ -35,25 +66,30 @@ competitive multiplayer). no launcher can change that.
 confirmed running: fields of mistria, kynseed, travellers rest. cozy, 2d,
 single player, no anti cheat.
 
-## build
+## checks
 
-needs the swift toolchain from the command line tools. no full xcode project.
+```bash
+./scripts/smoke.sh          # paths, pins, --self-test, --doctor
+decant --self-test          # pure logic only
+decant --doctor             # engine / bottle / dumps / launch script
+decant --log                # print log path + tail
+decant --gc                 # report / trim crash dumps
+```
 
-    ./scripts/bundle.sh        # builds build/decant.app
-    open build/decant.app
+logs land in `~/Library/Application Support/decant/logs/decant.log`.
+the ui ledger has a **log** link; launch errors show as a banner.
 
-the app assumes the wine 11 + dxmt engine is already set up in
-`~/Library/Application Support/hearth`. if it is missing, decant reports the
-engine as not ready rather than trying to build it. setting up that engine is
-a separate, one-time job, based on the recipe at
-github.com/notpop/steam-on-m1-wine plus a rebuilt winemac driver and the dxmt
-fork.
+pins: `engine/PINS.md`.
 
 ## status
 
+- engine recipe in-repo, install defaults to Application Support/decant (done)
 - cozy pixel swiftui library ui (done)
-- engine manager: detect the wine 11 + dxmt engine and its bottle (done)
+- engine manager: detect wine 11 + dxmt bottle (done)
 - install windows steam, scan the library, find owned games (done)
-- launch a game by its steam app id, with the directx-to-metal env (done)
-- add and uninstall games through steam, themed desktop game icons, and a
-  pour-on-launch animation (done)
+- launch a game by steam app id, with the directx-to-metal env (done)
+- add and uninstall games through steam, themed desktop icons, pour animation (done)
+- gui launch errors, honest status, prefix-scoped kills, structured logs (done)
+
+this is the opposite end from [wisp](../wisp): wisp emulates a cpu from
+scratch for a toy program; decant runs real games on a mature stack.

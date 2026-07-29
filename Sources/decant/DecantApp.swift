@@ -31,6 +31,18 @@ private func handleCLI() {
         exit(0)
     }
 
+    if args.contains("--self-test") {
+        exit(SelfTest.run() ? 0 : 1)
+    }
+
+    if args.contains("--log") {
+        print(DecantLog.fileURL.path)
+        if FileManager.default.fileExists(atPath: DecantLog.fileURL.path) {
+            print(DecantLog.tail(lines: 30))
+        }
+        exit(0)
+    }
+
     if args.contains("--init-bottle") {
         runOrDie {
             print("decant: creating bottle (first boot can take a minute)...")
@@ -55,12 +67,15 @@ private func handleCLI() {
     }
 
     if args.contains("--gc") {
-        let bytes = Housekeeping.dumpBytes(bottle)
-        print("decant: crash dumps \(Housekeeping.human(bytes)) (cap \(Housekeeping.human(Housekeeping.dumpCapBytes)))")
-        let freed = Housekeeping.trimDumps(bottle)
-        print(freed > 0
-            ? "decant: over cap, cleared \(Housekeeping.human(freed))"
-            : "decant: under cap, nothing to clear")
+        let report = Housekeeping.evaluateDumps(bottle)
+        print("decant: \(report.summary)")
+        if report.overCap {
+            let freed = Housekeeping.trimDumps(bottle)
+            print("decant: over cap, cleared \(Housekeeping.human(freed))")
+            DecantLog.line("gc cleared \(Housekeeping.human(freed)) dumps")
+        } else {
+            print("decant: under cap, nothing to clear")
+        }
         exit(0)
     }
 

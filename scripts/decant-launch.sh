@@ -1,12 +1,26 @@
 #!/bin/bash
-# decant-launch.sh — the single entry point hearth's ui calls to drive the
-# working wine 11 + dxmt stack. all the env the recipe needs is baked in here
-# so the swift side just runs "decant-launch.sh steam" or
-# "decant-launch.sh play <appid>".
-set -o pipefail
+# decant-launch.sh — entry point the UI calls to drive the wine 11 + dxmt
+# stack. all env the engine needs is baked in here so swift only runs
+# "decant-launch.sh steam" or "decant-launch.sh play <appid>".
+set -euo pipefail
 
-SUP="$HOME/Library/Application Support/hearth"
-REPO="$SUP/engine/steam-on-m1-wine"
+SUP="${DECANT_HOME:-$HOME/Library/Application Support/decant}"
+export DECANT_HOME="$SUP"
+mkdir -p "$SUP/logs"
+LOG="$SUP/logs/decant-launch.log"
+log() { echo "[$(date -u +%Y-%m-%dT%H:%M:%SZ)] $*" | tee -a "$LOG" >&2; }
+
+# prefer the git tree engine (monorepo) when this script lives there;
+# otherwise the deployed copy under Application Support.
+SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+if [ -d "$SCRIPT_DIR/../engine/scripts" ]; then
+    REPO="$(cd "$SCRIPT_DIR/../engine" && pwd)"
+elif [ -d "$SUP/engine/scripts" ]; then
+    REPO="$SUP/engine"
+else
+    log "error: decant engine not found (looked next to this script and under $SUP/engine)"
+    exit 1
+fi
 
 export WINE_APP="$SUP/engines/wine11/Wine Stable.app"
 export WINE_BIN="$WINE_APP/Contents/Resources/wine/bin/wine"
@@ -23,20 +37,31 @@ steam_running() { pgrep -f "steamwebhelper.exe" >/dev/null 2>&1; }
 wait_for_login() {
     local i
     for i in $(seq 1 30); do
-        grep -q "Logged On" "$STEAM_DIR/logs/connection_log.txt" 2>/dev/null && return 0
+        if grep -q "Logged On" "$STEAM_DIR/logs/connection_log.txt" 2>/dev/null; then
+            return 0
+        fi
         sleep 2
     done
+    log "warn: steam login wait timed out (continuing)"
     return 0
 }
 
 open_steam() {
-    # the notpop launcher handles process cleanup, singleton locks, the
-    # webhelper wrapper redeploy, the virtual desktop, and the flag set.
+    log "open_steam via $REPO/scripts/launch-steam.sh"
     bash "$REPO/scripts/launch-steam.sh" --detach
 }
 
 play_game() {
     local appid="$1"
+    log "play_game appid=$appid"
+    if [ ! -x "$WINE_BIN" ]; then
+        log "error: wine missing at $WINE_BIN"
+        exit 1
+    fi
+    if [ ! -f "$STEAM_EXE" ]; then
+        log "error: steam.exe missing at $STEAM_EXE"
+        exit 1
+    fi
     if ! steam_running; then
         open_steam
         wait_for_login
@@ -45,20 +70,22 @@ play_game() {
     WINEDEBUG=-all WINEDLLOVERRIDES="$GAME_OVERRIDES" \
         nohup arch -x86_64 "$WINE_BIN" "$STEAM_EXE" \
         -applaunch "$appid" -force-d3d11-no-singlethreaded -screen-fullscreen 0 \
-        >/dev/null 2>&1 &
+        >>"$LOG" 2>&1 &
+    log "launching app $appid"
     echo "launching app $appid"
 }
 
 uninstall_game() {
     local appid="$1"
+    log "uninstall_game appid=$appid"
     if ! steam_running; then
         open_steam
         wait_for_login
         sleep 3
     fi
-    # steam://uninstall/<appid> opens steam's own uninstall confirmation.
     WINEDEBUG=-all nohup arch -x86_64 "$WINE_BIN" "$STEAM_EXE" \
-        "steam://uninstall/$appid" >/dev/null 2>&1 &
+        "steam://uninstall/$appid" >>"$LOG" 2>&1 &
+    log "uninstalling app $appid"
     echo "uninstalling app $appid"
 }
 

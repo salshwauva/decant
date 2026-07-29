@@ -21,9 +21,21 @@ cp Resources/cellar-bg.jpg "$APP/Contents/Resources/cellar-bg.jpg"
 mkdir -p "$APP/Contents/Resources/pour"
 cp Resources/pour/*.png "$APP/Contents/Resources/pour/"
 
-HEARTH_ENGINE_DIR="$HOME/Library/Application Support/hearth/engine"
-mkdir -p "$HEARTH_ENGINE_DIR"
-cp scripts/decant-launch.sh "$HEARTH_ENGINE_DIR/decant-launch.sh"
+# deploy launch wrapper + engine recipe so the .app works without the git tree
+ENGINE_DIR="$HOME/Library/Application Support/decant/engine"
+mkdir -p "$ENGINE_DIR"
+cp scripts/decant-launch.sh "$ENGINE_DIR/decant-launch.sh"
+chmod +x "$ENGINE_DIR/decant-launch.sh"
+if [ -d engine/scripts ]; then
+  rsync -a \
+    --exclude 'vendor' \
+    --exclude '.git' \
+    --exclude '.DS_Store' \
+    engine/ "$ENGINE_DIR/"
+  # launch script stays the UI entrypoint at engine/decant-launch.sh
+  cp scripts/decant-launch.sh "$ENGINE_DIR/decant-launch.sh"
+  chmod +x "$ENGINE_DIR/decant-launch.sh"
+fi
 
 cat > "$APP/Contents/Info.plist" <<'PLIST'
 <?xml version="1.0" encoding="UTF-8"?>
