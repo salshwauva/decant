@@ -1,23 +1,26 @@
 # decant
 
-a cozy launcher for windows-only steam games on apple silicon. one project:
-the **engine** (wine 11 + dxmt install and launch scripts) and the **ui**
-(swiftui shelf that drives it).
+decant is a launcher for windows-only steam games on apple silicon. it sets up
+wine and dxmt, finds your steam library, and runs your games from a swiftui
+shelf.
 
-decant does not emulate a cpu. the hard work is done by tools that already
-exist:
+## why
 
-- rosetta 2 translates the x86-64 instructions (built into macos)
-- wine provides the windows api and loads the program
-- dxmt turns the game's directx calls into metal
-
-on macos 26, off-the-shelf stacks (game porting toolkit, whisky, crossover,
-mythic) fell over. the engine half of this repo builds a working free path:
+on macos 26 the off-the-shelf stacks (game porting toolkit, whisky, crossover,
+mythic) fell over. the engine half of this repo builds a free path that works:
 wine 11 with a rebuilt winemac driver and dxmt, under
 `~/Library/Application Support/decant`. the ui detects that stack, installs
 windows steam into a bottle, lists your games, and launches them.
 
-## layout
+## how it works
+
+decant does not emulate a cpu. it stands on tools that already exist:
+
+- rosetta 2 translates the x86-64 instructions (built into macos)
+- wine gives the windows api and loads the program
+- dxmt turns the game's directx calls into metal
+
+layout:
 
 ```
 decant/
@@ -29,10 +32,10 @@ decant/
 
 the engine scripts started from
 [notpop/steam-on-m1-wine](https://github.com/notpop/steam-on-m1-wine) (MIT,
-base `540037e`) and live here as the owned recipe. attribution:
+base `540037e`) and live here as the owned recipe. the attribution is in
 `engine/NOTICE`.
 
-## setup
+## run
 
 ### 1. build the engine (once, ~1 hour first run)
 
@@ -40,31 +43,28 @@ base `540037e`) and live here as the owned recipe. attribution:
 bash engine/install.sh
 ```
 
-that installs wine, creates the bottle, wires steam + dxmt, and deploys the
-recipe under Application Support. `--minimal` stops before the long dxmt/wine
-rebuilds if you only need the steam ui.
+that installs wine, creates the bottle, wires steam and dxmt, and deploys the
+recipe under Application Support. `--minimal` stops before the long dxmt and
+wine rebuilds if you only need the steam ui.
 
 ### 2. build the ui
 
-needs the swift toolchain from the command line tools. no full xcode project.
+the ui needs the swift toolchain from the command line tools. there is no full
+xcode project.
+
+```bash
+swift build -c release
+```
+
+build the full app bundle when you want to open it in the finder:
 
 ```bash
 ./scripts/bundle.sh        # builds build/decant.app, deploys launch scripts
 open build/decant.app
 ```
 
-if the engine is missing, the app reports it as not ready and points at the
-setup guide (`engine/install.sh`).
-
-## scope and honesty
-
-works: single-player and many online titles run through this stack.
-
-does not work, ever, on macos: games with kernel level anti cheat (a lot of
-competitive multiplayer). no launcher can change that.
-
-confirmed running: fields of mistria, kynseed, travellers rest. cozy, 2d,
-single player, no anti cheat.
+when the engine is missing, the app reports it as not ready and points at the
+setup script (`engine/install.sh`).
 
 ## checks
 
@@ -76,15 +76,15 @@ decant --log                # print log path + tail
 decant --gc                 # report / trim crash dumps
 ```
 
-logs land in `~/Library/Application Support/decant/logs/decant.log`.
-the ui ledger has a **log** link; launch errors show as a banner.
+logs land in `~/Library/Application Support/decant/logs/decant.log`. the ui
+ledger has a log link. launch errors show as a banner.
 
-pins: `engine/PINS.md`.
+pins are in `engine/PINS.md`.
 
 ## engine updates
 
-each engine version lives in its own directory. `current` names the active
-one, `previous` names the one it replaced.
+each engine version lives in its own directory. `current` names the active one.
+`previous` names the one it replaced.
 
 ```
 engines/
@@ -104,12 +104,12 @@ an install runs five steps. `Sources/decant/EngineStore.swift` and
 4. rename `versions/<id>.partial` onto `versions/<id>`
 5. write `current.new`, rename it onto `current`, then point `previous` at the old id
 
-a failure at any step leaves `current` on the old version and leaves the
-bottle untouched. `decant --rollback-engine` swaps back to `previous`.
+a failure at any step leaves `current` on the old version and leaves the bottle
+untouched. `decant --rollback-engine` swaps back to `previous`.
 
-the self-test installs a fake engine, fingerprints a fake prefix, then fails
-one install per fault case and checks that the old engine is still active and
-the prefix still hashes the same:
+the self-test installs a fake engine, fingerprints a fake prefix, then fails one
+install per fault case. it checks that the old engine is still active and the
+prefix still hashes the same:
 
 ```bash
 swift build -c release && .build/release/decant --self-test
@@ -126,9 +126,9 @@ disagree.
 
 ## launch lifecycle
 
-pressing play runs a state machine. the states, the evidence each transition
-needs, the timeouts, and what "process detected" can and cannot prove are in
-[docs/launch-lifecycle.md](docs/launch-lifecycle.md).
+when you press play, the ui runs a state machine. the states, the evidence each
+transition needs, the timeouts, and what "process detected" can and cannot prove
+are in [docs/launch-lifecycle.md](docs/launch-lifecycle.md).
 
 every launch gets an id and a stage log. a finished or failed launch writes a
 redacted report:
@@ -137,8 +137,8 @@ redacted report:
 decant --export-launch      # print the newest logs/launch-<id>.txt
 ```
 
-the state machine is a pure swift type, so the self-test drives it with a
-fake clock, a fake probe and a fake spawner. no wine, no bottle:
+the state machine is a pure swift type, so the self-test drives it with a fake
+clock, a fake probe, and a fake spawner. no wine, no bottle:
 
 ```bash
 swift build -c release && .build/release/decant --self-test
@@ -179,16 +179,12 @@ count them with:
 
 `./scripts/smoke.sh` fails when any of those cases goes missing.
 
-## status
+## known limits
 
-- engine recipe in-repo, install defaults to Application Support/decant (done)
-- cozy pixel swiftui library ui (done)
-- engine manager: detect wine 11 + dxmt bottle (done)
-- install windows steam, scan the library, find owned games (done)
-- launch a game by steam app id, with the directx-to-metal env (done)
-- add and uninstall games through steam, themed desktop icons, pour animation (done)
-- gui launch errors, honest status, prefix-scoped kills, structured logs (done)
-- launch lifecycle: phases, launch ids, stage log, timeouts, redacted report (done)
+single-player and many online titles run through this stack.
 
-this is the opposite end from [wisp](../wisp): wisp emulates a cpu from
-scratch for a toy program; decant runs real games on a mature stack.
+games with kernel-level anti-cheat never run on macos. no launcher changes that.
+that rules out a lot of competitive multiplayer.
+
+confirmed running: fields of mistria, kynseed, travellers rest. those are cozy
+single-player games with no anti-cheat.
