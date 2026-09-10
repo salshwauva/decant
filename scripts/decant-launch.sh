@@ -22,7 +22,13 @@ else
     exit 1
 fi
 
-export WINE_APP="$SUP/engines/wine11/Wine Stable.app"
+# engines/current is the active version in the engine store. older installs
+# have only engines/wine11.
+if [ -d "$SUP/engines/current/Wine Stable.app" ]; then
+  export WINE_APP="$SUP/engines/current/Wine Stable.app"
+else
+  export WINE_APP="$SUP/engines/wine11/Wine Stable.app"
+fi
 export WINE_BIN="$WINE_APP/Contents/Resources/wine/bin/wine"
 export WINESERVER_BIN="$WINE_APP/Contents/Resources/wine/bin/wineserver"
 export WINEPREFIX="$SUP/bottles/steam11"

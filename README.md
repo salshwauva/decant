@@ -81,6 +81,49 @@ the ui ledger has a **log** link; launch errors show as a banner.
 
 pins: `engine/PINS.md`.
 
+## engine updates
+
+each engine version lives in its own directory. `current` names the active
+one, `previous` names the one it replaced.
+
+```
+engines/
+  versions/<id>/                one engine version
+  versions/<id>/manifest.json   pins plus a sha256 per artifact
+  versions/<id>.partial/        in-flight work
+  current   -> versions/<id>
+  previous  -> versions/<id>
+```
+
+an install runs five steps. `Sources/decant/EngineStore.swift` and
+`engine/scripts/lib/engine-store.sh` both follow them:
+
+1. copy the new engine into `versions/<id>.partial`
+2. hash every artifact the manifest lists (sha256)
+3. validate the staged directory: manifest id, artifacts present, hashes
+4. rename `versions/<id>.partial` onto `versions/<id>`
+5. write `current.new`, rename it onto `current`, then point `previous` at the old id
+
+a failure at any step leaves `current` on the old version and leaves the
+bottle untouched. `decant --rollback-engine` swaps back to `previous`.
+
+the self-test installs a fake engine, fingerprints a fake prefix, then fails
+one install per fault case and checks that the old engine is still active and
+the prefix still hashes the same:
+
+```bash
+swift build -c release && .build/release/decant --self-test
+```
+
+that run prints one `FAULT <name> recovered` line per case, then the count:
+
+```
+N=6
+```
+
+`./scripts/smoke.sh` fails when the count and the number of `FAULT` lines
+disagree.
+
 ## status
 
 - engine recipe in-repo, install defaults to Application Support/decant (done)

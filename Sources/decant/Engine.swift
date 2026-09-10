@@ -28,11 +28,23 @@ enum DecantError: Error, CustomStringConvertible {
 enum EnginePaths {
     // only the monorepo engine install counts: patched wine 11 under
     // Application Support/decant (rebuilt winemac.so + dxmt).
+    static let wineAppRelative = "Wine Stable.app/Contents/Resources/wine/bin/wine"
+
+    static var engines: URL { support.appendingPathComponent("engines", isDirectory: true) }
+
+    // the engine store points engines/current at the active version. an
+    // install made before the store existed has only engines/wine11, so fall
+    // back to it until the next install.
     static var wineBinary: String {
-        support.appendingPathComponent(
-            "engines/wine11/Wine Stable.app/Contents/Resources/wine/bin/wine"
-        ).path
+        let current = engines.appendingPathComponent("current")
+            .appendingPathComponent(wineAppRelative)
+        if FileManager.default.fileExists(atPath: current.path) { return current.path }
+        return engines.appendingPathComponent("wine11")
+            .appendingPathComponent(wineAppRelative).path
     }
+
+    // the engine store for the real support directory.
+    static var store: EngineStore { EngineStore(root: engines) }
 
     static var support: URL {
         FileManager.default.homeDirectoryForCurrentUser

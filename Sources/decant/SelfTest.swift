@@ -53,8 +53,9 @@ enum SelfTest {
         check("support ends with decant",
               EnginePaths.support.path.hasSuffix("Application Support/decant")
                 || EnginePaths.support.path.contains("Application Support/decant"))
-        check("wine path under engines/wine11",
-              EnginePaths.wineBinary.contains("engines/wine11"))
+        check("wine path under engines/current or the wine11 fallback",
+              EnginePaths.wineBinary.contains("engines/current")
+                || EnginePaths.wineBinary.contains("engines/wine11"))
 
         // status enum headlines distinct
         check("headline noEngine", EngineStatus.noEngine.headline.contains("not installed"))
@@ -65,11 +66,110 @@ enum SelfTest {
             print("skip headline noBottle (no wine on disk)")
         }
 
+        // engine update faults. temp directories only, never a real bottle.
+        runEngineUpdateFaults { name, ok, detail in check(name, ok, detail) }
+
         if failed == 0 {
             print("self-test: all passed")
             return true
         }
         print("self-test: \(failed) failure(s)")
         return false
+    }
+
+    // engine update fault suite. build a fake old engine and activate it,
+    // fingerprint a fake game prefix, then fail one install per fault and
+    // prove the old engine is still active and the prefix is byte for byte
+    // the same. one "FAULT <name> recovered" line per case, then the count.
+    static func runEngineUpdateFaults(_ record: (String, Bool, String) -> Void) {
+        let fm = FileManager.default
+        let tmp = fm.temporaryDirectory
+            .appendingPathComponent("decant-engine-faults-\(UUID().uuidString)", isDirectory: true)
+        defer { try? fm.removeItem(at: tmp) }
+
+        func writeFile(_ url: URL, _ text: String) throws {
+            try fm.createDirectory(at: url.deletingLastPathComponent(),
+                                   withIntermediateDirectories: true)
+            try Data(text.utf8).write(to: url, options: .atomic)
+        }
+
+        do {
+            let srcOld = tmp.appendingPathComponent("build-old", isDirectory: true)
+            let srcNew = tmp.appendingPathComponent("build-new", isDirectory: true)
+            try writeFile(srcOld.appendingPathComponent("bin/wine"), "old engine bytes\n")
+            try writeFile(srcNew.appendingPathComponent("bin/wine"), "new engine bytes\n")
+            try writeFile(srcNew.appendingPathComponent("lib/dxmt.dll"), "new dxmt bytes\n")
+
+            let prefix = tmp.appendingPathComponent("bottle", isDirectory: true)
+            try writeFile(prefix.appendingPathComponent("drive_c/game/save.dat"), "save one\n")
+            try writeFile(prefix.appendingPathComponent("drive_c/game/config.ini"), "res=1080\n")
+
+            let store = EngineStore(root: tmp.appendingPathComponent("engines", isDirectory: true))
+            let oldManifest = try fakeManifest(id: "v-old", from: srcOld)
+            let newManifest = try fakeManifest(id: "v-new", from: srcNew)
+
+            try store.install(from: srcOld, manifest: oldManifest, fault: nil)
+            record("engine v-old active", try store.activeID() == "v-old", "")
+
+            let before = PrefixHasher.sha256(of: prefix)
+
+            for fault in EngineFault.allCases {
+                var recovered = true
+                func step(_ name: String, _ passed: Bool, _ detail: String = "") {
+                    if !passed { recovered = false }
+                    record("\(fault.rawValue) \(name)", passed, detail)
+                }
+
+                var thrown: Error?
+                do {
+                    try store.install(from: srcNew, manifest: newManifest, fault: fault)
+                } catch {
+                    thrown = error
+                }
+                step("install throws", thrown != nil, "install returned without an error")
+
+                let active = ((try? store.activeID()) ?? nil)
+                step("current stays v-old", active == "v-old", "current is \(active ?? "nil")")
+
+                var oldValid = true
+                var oldDetail = ""
+                do {
+                    try store.validate(id: "v-old")
+                } catch {
+                    oldValid = false
+                    oldDetail = "\(error)"
+                }
+                step("v-old still validates", oldValid, oldDetail)
+                step("prefix unchanged", PrefixHasher.sha256(of: prefix) == before,
+                     "prefix hash moved")
+
+                if recovered { print("FAULT \(fault.rawValue) recovered") }
+            }
+            print("N=\(EngineFault.allCases.count)")
+
+            // the happy path, then a rollback to the version it replaced.
+            try store.install(from: srcNew, manifest: newManifest, fault: nil)
+            record("clean install activates v-new", try store.activeID() == "v-new", "")
+            try store.rollback()
+            record("rollback restores v-old", try store.activeID() == "v-old", "")
+            record("rollback leaves prefix unchanged",
+                   PrefixHasher.sha256(of: prefix) == before, "")
+        } catch {
+            record("engine fault suite", false, "\(error)")
+        }
+    }
+
+    private static func fakeManifest(id: String, from dir: URL) throws -> EngineManifest {
+        EngineManifest(
+            id: id,
+            wineTag: "wine-11.0",
+            wineSourceCommit: "self-test",
+            dxmtTag: "v0.74",
+            dxmtCommit: "self-test",
+            patches: ["winemac-visibility"],
+            build: ["host": "self-test"],
+            artifacts: try EngineStore.artifactHashes(of: dir),
+            createdAt: Date(timeIntervalSince1970: 0)
+        )
     }
 }

@@ -66,6 +66,15 @@ private func handleCLI() {
         }
     }
 
+    // swap back to the engine version the last install replaced.
+    if args.contains("--rollback-engine") {
+        runOrDie {
+            try EnginePaths.store.rollback()
+            print("decant: engine rolled back")
+            EngineManager.doctor()
+        }
+    }
+
     if args.contains("--gc") {
         let report = Housekeeping.evaluateDumps(bottle)
         print("decant: \(report.summary)")
