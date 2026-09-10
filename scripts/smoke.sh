@@ -111,6 +111,43 @@ else
 fi
 rm -rf "$STORE_TMP"
 
+# a staged version with a bad artifact hash must not replace anything: the
+# promote fails, versions/<id> is never created, and current stays put.
+STORE_TMP="$(mktemp -d)"
+if (
+  set -euo pipefail
+  export DECANT_HOME="$STORE_TMP"
+  export ENGINE_STORE_ROOT="$STORE_TMP/engines"
+  # shellcheck source=../engine/scripts/lib/common.sh
+  source engine/scripts/lib/common.sh
+  # shellcheck source=../engine/scripts/lib/engine-store.sh
+  source engine/scripts/lib/engine-store.sh
+
+  # a good version is active first.
+  mkdir -p "$ENGINE_STORE_ROOT/versions/v-good/bin"
+  printf 'good wine\n' > "$ENGINE_STORE_ROOT/versions/v-good/bin/wine"
+  engine_store_write_manifest "$ENGINE_STORE_ROOT/versions/v-good" \
+    v-good wine-11.0 self-test v0.74 self-test
+  engine_store_activate v-good
+
+  # stage v-bad, then change the artifact so the manifest hash is wrong.
+  STAGING="$ENGINE_STORE_ROOT/versions/v-bad.partial"
+  mkdir -p "$STAGING/bin"
+  printf 'staged wine\n' > "$STAGING/bin/wine"
+  engine_store_write_manifest "$STAGING" v-bad wine-11.0 self-test v0.74 self-test
+  printf 'tampered wine\n' > "$STAGING/bin/wine"
+
+  ! engine_store_promote v-bad
+  [ ! -e "$ENGINE_STORE_ROOT/versions/v-bad" ]
+  [ ! -e "$STAGING" ]
+  [ "$(basename "$(readlink "$ENGINE_STORE_ROOT/current")")" = "v-good" ]
+) >/dev/null 2>&1; then
+  pass "engine-store rejects a bad staged version and leaves current -> v-good"
+else
+  bad "engine-store promoted a bad staged version"
+fi
+rm -rf "$STORE_TMP"
+
 # support dir paths
 SUP="${DECANT_HOME:-$HOME/Library/Application Support/decant}"
 if [ -x "$SUP/engines/wine11/Wine Stable.app/Contents/Resources/wine/bin/wine" ]; then

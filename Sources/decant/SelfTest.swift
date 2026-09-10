@@ -107,7 +107,7 @@ enum SelfTest {
             try writeFile(prefix.appendingPathComponent("drive_c/game/save.dat"), "save one\n")
             try writeFile(prefix.appendingPathComponent("drive_c/game/config.ini"), "res=1080\n")
 
-            let store = EngineStore(root: tmp.appendingPathComponent("engines", isDirectory: true))
+            var store = EngineStore(root: tmp.appendingPathComponent("engines", isDirectory: true))
             let oldManifest = try fakeManifest(id: "v-old", from: srcOld)
             let newManifest = try fakeManifest(id: "v-new", from: srcNew)
 
@@ -123,12 +123,19 @@ enum SelfTest {
                     record("\(fault.rawValue) \(name)", passed, detail)
                 }
 
+                // interruptedSwitch stops the real switch path between
+                // current.new and the rename onto current.
+                store.switchBarrier = fault == .interruptedSwitch ? { _ in
+                    throw EngineStoreError.interrupted("stopped between current.new and current")
+                } : nil
+
                 var thrown: Error?
                 do {
                     try store.install(from: srcNew, manifest: newManifest, fault: fault)
                 } catch {
                     thrown = error
                 }
+                store.switchBarrier = nil
                 step("install throws", thrown != nil, "install returned without an error")
 
                 let active = ((try? store.activeID()) ?? nil)
@@ -145,6 +152,11 @@ enum SelfTest {
                 step("v-old still validates", oldValid, oldDetail)
                 step("prefix unchanged", PrefixHasher.sha256(of: prefix) == before,
                      "prefix hash moved")
+
+                // a half written switch link must not survive the failure.
+                let pendingPath = store.root.appendingPathComponent("current.new").path
+                let stale = (try? fm.destinationOfSymbolicLink(atPath: pendingPath)) != nil
+                step("no stale current.new", !stale, "current.new is still there")
 
                 if recovered { print("FAULT \(fault.rawValue) recovered") }
             }

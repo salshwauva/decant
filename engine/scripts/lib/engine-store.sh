@@ -42,11 +42,12 @@ engine_store_previous_id() {
     basename "$(readlink "$link")"
 }
 
-# step 2 and 3: manifest id matches the directory name, every artifact the
-# manifest lists is present, and every sha256 matches.
-engine_store_validate() {
-    local id=$1
-    local dir="$ENGINE_STORE_ROOT/versions/$id"
+# step 2 and 3: manifest id matches the expected id, every artifact the
+# manifest lists is present, and every sha256 matches. this half takes a
+# directory, so the same check runs on a staging directory before step 4.
+engine_store_validate_dir() {
+    local dir=$1
+    local id=$2
     local manifest="$dir/manifest.json"
 
     [[ -d "$dir" ]] || { log_error "no engine version at $dir"; return 1; }
@@ -80,6 +81,12 @@ for path, digest in sorted(m["artifacts"].items()):
 
     [[ "$count" -gt 0 ]] || { log_error "manifest lists no artifacts"; return 1; }
     return 0
+}
+
+# the same check against an installed version directory.
+engine_store_validate() {
+    local id=$1
+    engine_store_validate_dir "$ENGINE_STORE_ROOT/versions/$id" "$id"
 }
 
 # write manifest.json for a staged or installed version directory.
@@ -119,6 +126,32 @@ manifest = {
 with open(os.path.join(directory, "manifest.json"), "w") as fh:
     json.dump(manifest, fh, indent=2, sort_keys=True)
 PY
+}
+
+# steps 3, 4 and 5: validate versions/<id>.partial, rename it onto
+# versions/<id>, then switch current. the staging directory is the only thing
+# a bad version can lose. current and any installed version stay as they are
+# until validation passes.
+engine_store_promote() {
+    local id=$1
+    local staging="$ENGINE_STORE_ROOT/versions/$id.partial"
+    local dir="$ENGINE_STORE_ROOT/versions/$id"
+
+    # step 3: validate the staged directory on its own terms.
+    if ! engine_store_validate_dir "$staging" "$id"; then
+        rm -rf "$staging"
+        log_error "staged engine $id did not validate, nothing was replaced"
+        return 1
+    fi
+
+    # step 4: rename the partial directory into place. any leftover directory
+    # with this id is incomplete, so it goes; other versions stay.
+    rm -rf "$dir"
+    mkdir -p "$(dirname "$dir")"
+    mv "$staging" "$dir"
+
+    # step 5: switch current and record previous.
+    engine_store_activate "$id"
 }
 
 # step 5: point current at id, then record the id it replaced.

@@ -93,14 +93,10 @@ else
     engine_store_write_manifest "$STAGING" "$ENGINE_ID" \
         "$ENGINE_WINE_TAG" "$ENGINE_WINE_COMMIT" "$ENGINE_DXMT_TAG" "$ENGINE_DXMT_COMMIT"
 
-    # step 4: rename the partial directory into place. Any leftover directory
-    # with this id is incomplete, so it goes; other versions stay.
-    rm -rf "$VERSION_DIR"
-    mkdir -p "$(dirname "$VERSION_DIR")"
-    mv "$STAGING" "$VERSION_DIR"
-
-    # step 3 and 5: validate, then switch current and record previous.
-    engine_store_activate "$ENGINE_ID"
+    # steps 3, 4 and 5: validate the staged copy, rename it into place, then
+    # switch current. A staged copy that does not validate is removed and
+    # current keeps the version it already had.
+    engine_store_promote "$ENGINE_ID" || die "Engine version $ENGINE_ID did not install"
 fi
 
 # point this shell at the version that is now active.

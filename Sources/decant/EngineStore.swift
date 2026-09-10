@@ -61,6 +61,12 @@ enum EngineStoreError: Error, CustomStringConvertible {
 struct EngineStore {
     let root: URL
 
+    // test seam for step 5. the link helper calls this after it writes the
+    // .new symlink and before it renames that link onto the real name, so
+    // the fault suite can stop a switch where a crash would stop it. the app
+    // leaves it nil.
+    var switchBarrier: ((URL) throws -> Void)?
+
     private var fm: FileManager { FileManager.default }
 
     var versionsURL: URL { root.appendingPathComponent("versions", isDirectory: true) }
@@ -216,13 +222,8 @@ struct EngineStore {
             }
             renamed = true
 
-            // step 5: switch current.
-            if fault == .interruptedSwitch {
-                try? fm.removeItem(at: pending)
-                try fm.createSymbolicLink(atPath: pending.path,
-                                          withDestinationPath: "versions/\(manifest.id)")
-                throw EngineStoreError.interrupted("stopped between current.new and current")
-            }
+            // step 5: switch current. the interruptedSwitch fault comes from
+            // switchBarrier, so it fails inside the real switch path.
             try activate(id: manifest.id)
         } catch {
             try? fm.removeItem(at: staging)
@@ -292,6 +293,14 @@ struct EngineStore {
         let pending = link.appendingPathExtension("new")
         try? fm.removeItem(at: pending)
         try fm.createSymbolicLink(atPath: pending.path, withDestinationPath: relativeTarget)
+        if let barrier = switchBarrier {
+            do {
+                try barrier(pending)
+            } catch {
+                try? fm.removeItem(at: pending)
+                throw error
+            }
+        }
         guard rename(pending.path, link.path) == 0 else {
             try? fm.removeItem(at: pending)
             throw EngineStoreError.interrupted("could not rename onto \(link.path)")
