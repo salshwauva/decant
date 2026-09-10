@@ -69,6 +69,9 @@ enum SelfTest {
         // engine update faults. temp directories only, never a real bottle.
         runEngineUpdateFaults { name, ok, detail in check(name, ok, detail) }
 
+        // launch lifecycle. fake clock, fake probe, fake spawner, no wine.
+        runLaunchLifecycle { name, ok, detail in check(name, ok, detail) }
+
         if failed == 0 {
             print("self-test: all passed")
             return true
@@ -171,5 +174,163 @@ enum SelfTest {
             artifacts: try EngineStore.artifactHashes(of: dir),
             createdAt: Date(timeIntervalSince1970: 0)
         )
+    }
+
+    // launch lifecycle suite. the state machine is pure, so the four evidence
+    // steps run with no process at all. the controller cases use a fake clock
+    // and a fake probe, and DECANT_HOME points at a temp directory so no
+    // report ever lands in the real support folder.
+    static func runLaunchLifecycle(_ record: (String, Bool, String) -> Void) {
+        let fm = FileManager.default
+        let tmp = fm.temporaryDirectory
+            .appendingPathComponent("decant-launch-\(UUID().uuidString)", isDirectory: true)
+        let previousHome = ProcessInfo.processInfo.environment["DECANT_HOME"]
+        setenv("DECANT_HOME", tmp.path, 1)
+        defer {
+            if let previousHome { setenv("DECANT_HOME", previousHome, 1) } else { unsetenv("DECANT_HOME") }
+            try? fm.removeItem(at: tmp)
+        }
+
+        let prefix = tmp.appendingPathComponent("bottles/steam11", isDirectory: true)
+        try? fm.createDirectory(at: prefix, withIntermediateDirectories: true)
+
+        // 1. the happy path, straight through the machine.
+        var machine = LaunchMachine()
+        var walked = true
+        do {
+            try machine.apply(.userPlay(appID: "2432860"))
+            walked = walked && machine.phase == .preparing
+            try machine.apply(.steamReady)
+            walked = walked && machine.phase == .steamReady
+            try machine.apply(.requestSpawned(pid: 4242))
+            walked = walked && machine.phase == .requestSent
+            try machine.apply(.gameDetected)
+            walked = walked && machine.phase == .processDetected
+        } catch {
+            walked = false
+        }
+        record("launch happy", walked, "ended at \(machine.phase.label)")
+
+        // 2. a finished launch resets back to idle.
+        var afterReset = false
+        if (try? machine.apply(.reset)) != nil { afterReset = machine.phase == .idle }
+        record("launch reset to idle", afterReset, "phase is \(machine.phase.label)")
+
+        // 3. evidence the phase does not accept.
+        var idle = LaunchMachine()
+        var refused = false
+        do {
+            try idle.apply(.gameDetected)
+        } catch LaunchIllegal.badTransition {
+            refused = idle.phase == .idle
+        } catch {
+            refused = false
+        }
+        record("launch illegal detect from idle", refused, "phase is \(idle.phase.label)")
+
+        // 4. a second play while one is in flight changes nothing.
+        let dupClock = FakeLaunchClock(Date(timeIntervalSince1970: 0))
+        let dupProbe = FakeProcessProbe()
+        let dupSpawner = FakeLaunchSpawner()
+        let dup = LaunchController(clock: dupClock, probe: dupProbe, spawner: dupSpawner)
+        dup.requestPlay(appID: "2432860", engineVersion: "self-test", prefix: prefix)
+        let phaseBefore = dup.phase
+        dupClock.advance(5)
+        dup.requestPlay(appID: "2432860", engineVersion: "self-test", prefix: prefix)
+        record("launch duplicate play rejected",
+               dup.snapshot?.lastRejection == .duplicate, "rejection is \(String(describing: dup.snapshot?.lastRejection))")
+        record("launch duplicate leaves phase", dup.phase == phaseBefore,
+               "phase moved to \(dup.phase.label)")
+        record("launch duplicate does not spawn again",
+               dupSpawner.steamStarts == 1 && dupSpawner.gameStarts == 0,
+               "steam=\(dupSpawner.steamStarts) game=\(dupSpawner.gameStarts)")
+
+        // 5. steam never comes up: preparing times out at 90 seconds.
+        dupClock.advance(LaunchTimeout.preparing + 1)
+        dup.tick()
+        record("launch timeout preparing",
+               dup.phase == .failed(.timeout(from: .preparing)), "phase is \(dup.phase.label)")
+        let recovery = dup.snapshot?.recovery ?? []
+        record("launch timeout offers recovery",
+               recovery.contains(.retry) && recovery.contains(.openLog),
+               "recovery is \(recovery.map(\.rawValue))")
+
+        // 6. steam is already up, the request goes out, the game never appears.
+        let sentClock = FakeLaunchClock(Date(timeIntervalSince1970: 0))
+        let sentProbe = FakeProcessProbe()
+        sentProbe.steam = true
+        let sentSpawner = FakeLaunchSpawner()
+        let sent = LaunchController(clock: sentClock, probe: sentProbe, spawner: sentSpawner)
+        sent.requestPlay(appID: "2432860", engineVersion: "self-test", prefix: prefix)
+        record("launch request sent on warm steam",
+               sent.phase == .requestSent && sentSpawner.gameStarts == 1,
+               "phase is \(sent.phase.label)")
+        sentClock.advance(LaunchTimeout.requestSent + 1)
+        sent.tick()
+        record("launch timeout request sent",
+               sent.phase == .failed(.timeout(from: .requestSent)), "phase is \(sent.phase.label)")
+
+        // 7. the game shows up in the prefix, so the launch completes.
+        let liveClock = FakeLaunchClock(Date(timeIntervalSince1970: 0))
+        let liveProbe = FakeProcessProbe()
+        liveProbe.steam = true
+        let liveController = LaunchController(clock: liveClock,
+                                              probe: liveProbe,
+                                              spawner: FakeLaunchSpawner())
+        liveController.requestPlay(appID: "2432860", engineVersion: "self-test", prefix: prefix)
+        liveProbe.game = true
+        liveClock.advance(4)
+        liveController.tick()
+        record("launch process detected", liveController.phase == .processDetected,
+               "phase is \(liveController.phase.label)")
+
+        // 8. the report on disk names the stages and hides the private parts.
+        let home = fm.homeDirectoryForCurrentUser.path
+        let user = NSUserName()
+        let raw = """
+        [t] opened \(home)/Library/Application Support/decant/logs
+        AccountName=alice
+        steamid=76561190000000000
+        [t] play appid=2432860
+        """
+        let clean = LaunchDiagnostic.redact(raw, home: home, user: user)
+        record("redact hides the home path", !clean.contains(home), clean)
+        record("redact drops identity lines",
+               !clean.contains("alice") && !clean.contains("AccountName")
+                 && !clean.contains("steamid"), clean)
+        record("redact keeps the rest", clean.contains("play appid=2432860"), clean)
+
+        let reportPath = LaunchDiagnostic.reportURL(id: liveController.snapshot?.id ?? "none")
+        record("launch report is under DECANT_HOME",
+               reportPath.path.hasPrefix(tmp.path), reportPath.path)
+    }
+}
+
+// MARK: launch fakes. test-only seams, never used by the app.
+
+final class FakeLaunchClock: LaunchClock {
+    private var current: Date
+    init(_ start: Date) { current = start }
+    func now() -> Date { current }
+    func advance(_ seconds: TimeInterval) { current = current.addingTimeInterval(seconds) }
+}
+
+final class FakeProcessProbe: ProcessProbe {
+    var steam = false
+    var game = false
+    func steamReady(prefix: URL) -> Bool { steam }
+    func gameDetected(appID: String, prefix: URL) -> Bool { game }
+}
+
+final class FakeLaunchSpawner: LaunchSpawner {
+    private(set) var steamStarts = 0
+    private(set) var gameStarts = 0
+    func startSteam(launchID: String) throws -> Int32 {
+        steamStarts += 1
+        return 4242
+    }
+    func startGame(appID: String, launchID: String) throws -> Int32 {
+        gameStarts += 1
+        return 4343
     }
 }

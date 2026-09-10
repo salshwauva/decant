@@ -46,9 +46,21 @@ enum EnginePaths {
     // the engine store for the real support directory.
     static var store: EngineStore { EngineStore(root: engines) }
 
+    // DECANT_HOME moves the whole engine home. the shell scripts already
+    // honor it, so a test run can point both halves at a temp directory.
     static var support: URL {
-        FileManager.default.homeDirectoryForCurrentUser
+        if let home = ProcessInfo.processInfo.environment["DECANT_HOME"], !home.isEmpty {
+            return URL(fileURLWithPath: home, isDirectory: true)
+        }
+        return FileManager.default.homeDirectoryForCurrentUser
             .appendingPathComponent("Library/Application Support/decant", isDirectory: true)
+    }
+
+    // which engine a launch ran on. installs made before the engine store
+    // have no version id, so they report the old layout by name.
+    static var engineVersionLabel: String {
+        if let id = try? store.activeID(), !id.isEmpty { return id }
+        return "legacy-wine11"
     }
     static var bottles: URL { support.appendingPathComponent("bottles", isDirectory: true) }
     static func bottle(_ name: String) -> URL {

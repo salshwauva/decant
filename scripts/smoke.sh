@@ -63,6 +63,27 @@ else
   bad "engine fault count $faults does not match N=${n:-unset}"
 fi
 
+# the launch lifecycle cases must all be present and passing.
+launch_missing=""
+for name in "launch happy" "launch duplicate play rejected" \
+            "launch timeout preparing" "launch timeout request sent" \
+            "launch illegal detect from idle" "redact drops identity lines"; do
+  printf '%s\n' "$SELF_OUT" | grep -Fq "ok   $name" || launch_missing="$launch_missing $name;"
+done
+if [ -z "$launch_missing" ]; then
+  pass "launch lifecycle cases"
+else
+  bad "launch lifecycle cases missing or failing:$launch_missing"
+fi
+
+# decant-launch.sh must scope its steam check to this prefix, not the machine.
+if grep -q 'WINEPREFIX=\$WINEPREFIX' scripts/decant-launch.sh \
+   && grep -q 'DECANT_LAUNCH_ID' scripts/decant-launch.sh; then
+  pass "decant-launch.sh is prefix-scoped and carries the launch id"
+else
+  bad "decant-launch.sh still looks machine-wide or drops the launch id"
+fi
+
 "$BIN" --doctor && pass "--doctor" || bad "--doctor"
 
 # the shell half of the engine store must leave current as a symlink after an

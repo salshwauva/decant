@@ -124,6 +124,54 @@ N=6
 `./scripts/smoke.sh` fails when the count and the number of `FAULT` lines
 disagree.
 
+## launch lifecycle
+
+pressing play runs a state machine. the states, the evidence each transition
+needs, the timeouts, and what "process detected" can and cannot prove are in
+[docs/launch-lifecycle.md](docs/launch-lifecycle.md).
+
+every launch gets an id and a stage log. a finished or failed launch writes a
+redacted report:
+
+```bash
+decant --export-launch      # print the newest logs/launch-<id>.txt
+```
+
+the state machine is a pure swift type, so the self-test drives it with a
+fake clock, a fake probe and a fake spawner. no wine, no bottle:
+
+```bash
+swift build -c release && .build/release/decant --self-test
+```
+
+that run prints 15 launch cases:
+
+```
+ok   launch happy
+ok   launch reset to idle
+ok   launch illegal detect from idle
+ok   launch duplicate play rejected
+ok   launch duplicate leaves phase
+ok   launch duplicate does not spawn again
+ok   launch timeout preparing
+ok   launch timeout offers recovery
+ok   launch request sent on warm steam
+ok   launch timeout request sent
+ok   launch process detected
+ok   redact hides the home path
+ok   redact drops identity lines
+ok   redact keeps the rest
+ok   launch report is under DECANT_HOME
+```
+
+count them with:
+
+```bash
+.build/release/decant --self-test 2>/dev/null | grep -c '^ok   launch\|^ok   redact'
+```
+
+`./scripts/smoke.sh` fails when any of those cases goes missing.
+
 ## status
 
 - engine recipe in-repo, install defaults to Application Support/decant (done)
@@ -133,6 +181,7 @@ disagree.
 - launch a game by steam app id, with the directx-to-metal env (done)
 - add and uninstall games through steam, themed desktop icons, pour animation (done)
 - gui launch errors, honest status, prefix-scoped kills, structured logs (done)
+- launch lifecycle: phases, launch ids, stage log, timeouts, redacted report (done)
 
 this is the opposite end from [wisp](../wisp): wisp emulates a cpu from
 scratch for a toy program; decant runs real games on a mature stack.

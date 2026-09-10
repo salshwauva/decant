@@ -8,7 +8,10 @@ SUP="${DECANT_HOME:-$HOME/Library/Application Support/decant}"
 export DECANT_HOME="$SUP"
 mkdir -p "$SUP/logs"
 LOG="$SUP/logs/decant-launch.log"
-log() { echo "[$(date -u +%Y-%m-%dT%H:%M:%SZ)] $*" | tee -a "$LOG" >&2; }
+# decant passes the launch id in the environment so one launch can be traced
+# from the ui, through this script, into the log.
+LAUNCH_ID="${DECANT_LAUNCH_ID:-none}"
+log() { echo "[$(date -u +%Y-%m-%dT%H:%M:%SZ)] launch_id=$LAUNCH_ID $*" | tee -a "$LOG" >&2; }
 
 # prefer the git tree engine (monorepo) when this script lives there;
 # otherwise the deployed copy under Application Support.
@@ -38,7 +41,18 @@ STEAM_DIR="$WINEPREFIX/drive_c/Program Files (x86)/Steam"
 STEAM_EXE="$STEAM_DIR/steam.exe"
 GAME_OVERRIDES="dxgi,d3d11,d3d10core=n,b;bcrypt=b;ncrypt=b;gameoverlayrenderer,gameoverlayrenderer64=d"
 
-steam_running() { pgrep -f "steamwebhelper.exe" >/dev/null 2>&1; }
+# steam counts as running only when a matching process carries THIS prefix in
+# its environment. a machine-wide pgrep would see crossover, whisky and every
+# other bottle and skip the steam we actually need.
+steam_running() {
+    local pid
+    for pid in $(pgrep -f 'steamwebhelper|steam\.exe|steamservice' 2>/dev/null || true); do
+        if ps eww -p "$pid" 2>/dev/null | grep -Fq "WINEPREFIX=$WINEPREFIX"; then
+            return 0
+        fi
+    done
+    return 1
+}
 
 wait_for_login() {
     local i
@@ -78,6 +92,9 @@ play_game() {
         -applaunch "$appid" -force-d3d11-no-singlethreaded -screen-fullscreen 0 \
         >>"$LOG" 2>&1 &
     log "launching app $appid"
+    # the stage line is the evidence decant reads: the request went out. it
+    # says nothing about whether wine got the game running.
+    echo "DECANT_STAGE=request_sent"
     echo "launching app $appid"
 }
 

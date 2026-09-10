@@ -61,9 +61,21 @@ private func handleCLI() {
 
     if args.contains("--steam") {
         runOrDie {
-            try SteamManager.launchClient(bottle, engine: try requireEngine())
-            print("decant: launched steam client (sign in there)")
+            let id = UUID().uuidString
+            try SteamManager.launchClient(bottle, engine: try requireEngine(), launchID: id)
+            print("decant: launched steam client (sign in there), launch id \(id)")
         }
+    }
+
+    // print the newest launch report. the file on disk is already redacted.
+    if args.contains("--export-launch") {
+        guard let url = LaunchDiagnostic.latestReport() else {
+            print("decant: no launch reports yet in \(DecantLog.directory.path)")
+            exit(0)
+        }
+        print(url.path)
+        print((try? String(contentsOf: url, encoding: .utf8)) ?? "")
+        exit(0)
     }
 
     // swap back to the engine version the last install replaced.
@@ -105,8 +117,10 @@ private func handleCLI() {
     if let i = args.firstIndex(of: "--play"), i + 1 < args.count {
         let appid = args[i + 1]
         runOrDie {
-            try SteamManager.launchGame(appID: appid, bottle: bottle, engine: try requireEngine())
-            print("decant: launching app \(appid)")
+            let id = UUID().uuidString
+            try SteamManager.launchGame(appID: appid, bottle: bottle,
+                                        engine: try requireEngine(), launchID: id)
+            print("decant: launching app \(appid), launch id \(id)")
         }
     }
 }

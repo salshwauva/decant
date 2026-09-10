@@ -90,26 +90,36 @@ enum SteamManager {
         return url
     }
 
-    // result message for the ui (e.g. dump trim note). throws on hard failure.
-    @discardableResult
-    static func launchClient(_ bottle: URL, engine: Engine) throws -> String? {
-        let note = try clearDumpsIfBig(bottle)
-        let script = try requireLaunchScript()
-        _ = try EngineManager.spawn("/bin/bash", [script.path, "steam"])
-        DecantLog.line("launched steam client")
-        return note
+    // the pid of the wrapper decant started, plus a message for the ui
+    // (a dump trim note, say). the pid is the evidence that the request
+    // went out; it says nothing about whether wine got anywhere.
+    struct LaunchSpawn {
+        let pid: Int32
+        let note: String?
     }
 
     @discardableResult
-    static func launchGame(appID: String, bottle: URL, engine: Engine) throws -> String? {
+    static func launchClient(_ bottle: URL, engine: Engine, launchID: String) throws -> LaunchSpawn {
+        let note = try clearDumpsIfBig(bottle)
+        let script = try requireLaunchScript()
+        let pid = try EngineManager.spawn("/bin/bash", [script.path, "steam"],
+                                          extraEnv: ["DECANT_LAUNCH_ID": launchID])
+        DecantLog.line("launched steam client launch_id=\(launchID)")
+        return LaunchSpawn(pid: pid, note: note)
+    }
+
+    @discardableResult
+    static func launchGame(appID: String, bottle: URL, engine: Engine,
+                           launchID: String) throws -> LaunchSpawn {
         guard !appID.isEmpty, appID.allSatisfy({ $0.isNumber }) else {
             throw DecantError.launch("invalid steam app id: \(appID)")
         }
         let note = try clearDumpsIfBig(bottle)
         let script = try requireLaunchScript()
-        _ = try EngineManager.spawn("/bin/bash", [script.path, "play", appID])
-        DecantLog.line("launched game appid=\(appID)")
-        return note
+        let pid = try EngineManager.spawn("/bin/bash", [script.path, "play", appID],
+                                          extraEnv: ["DECANT_LAUNCH_ID": launchID])
+        DecantLog.line("launched game appid=\(appID) launch_id=\(launchID)")
+        return LaunchSpawn(pid: pid, note: note)
     }
 
     static func uninstallGame(appID: String, bottle: URL, engine: Engine) throws {
