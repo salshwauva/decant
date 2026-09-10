@@ -92,9 +92,6 @@ play_game() {
         -applaunch "$appid" -force-d3d11-no-singlethreaded -screen-fullscreen 0 \
         >>"$LOG" 2>&1 &
     log "launching app $appid"
-    # the stage line is the evidence decant reads: the request went out. it
-    # says nothing about whether wine got the game running.
-    echo "DECANT_STAGE=request_sent"
     echo "launching app $appid"
 }
 

@@ -312,9 +312,37 @@ enum SelfTest {
                  && !clean.contains("steamid"), clean)
         record("redact keeps the rest", clean.contains("play appid=2432860"), clean)
 
-        let reportPath = LaunchDiagnostic.reportURL(id: liveController.snapshot?.id ?? "none")
+        // 9. the wine side writes the same account name in three shapes. a
+        // fake name keeps this case honest on any machine.
+        let wineRaw = """
+        [t] wine opened drive_c/users/zuzu/AppData/Local/Mistria
+        [t] path Z:\\Users\\zuzu\\Documents\\save.dat
+        [t] shell C:\\users\\zuzu\\Temp
+        [t] theme zuzuberry loaded
+        """
+        let wineClean = LaunchDiagnostic.redact(wineRaw, home: "", user: "zuzu")
+        record("redact masks the unix side user",
+               wineClean.contains("drive_c/users/<user>/AppData"), wineClean)
+        record("redact masks the z drive user",
+               wineClean.contains("Z:\\Users\\<user>\\Documents"), wineClean)
+        record("redact masks the c drive user",
+               wineClean.contains("C:\\users\\<user>\\Temp"), wineClean)
+        record("redact keeps a word that contains the user",
+               wineClean.contains("zuzuberry"), wineClean)
+
+        // 10. the report the finished launch wrote is on disk, not just a path
+        // decant can compute.
+        let launchID = liveController.snapshot?.id ?? "none"
+        let reportPath = LaunchDiagnostic.reportURL(id: launchID)
         record("launch report is under DECANT_HOME",
                reportPath.path.hasPrefix(tmp.path), reportPath.path)
+        record("launch report exists on disk",
+               fm.fileExists(atPath: reportPath.path), reportPath.path)
+        let reportText = (try? String(contentsOf: reportPath, encoding: .utf8)) ?? ""
+        record("launch report names the launch id",
+               reportText.contains(launchID), reportText)
+        record("launch report hides the home path",
+               !reportText.isEmpty && !reportText.contains(home), reportText)
     }
 }
 

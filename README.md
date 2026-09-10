@@ -144,7 +144,7 @@ fake clock, a fake probe and a fake spawner. no wine, no bottle:
 swift build -c release && .build/release/decant --self-test
 ```
 
-that run prints 15 launch cases:
+that run prints 22 launch cases:
 
 ```
 ok   launch happy
@@ -161,7 +161,14 @@ ok   launch process detected
 ok   redact hides the home path
 ok   redact drops identity lines
 ok   redact keeps the rest
+ok   redact masks the unix side user
+ok   redact masks the z drive user
+ok   redact masks the c drive user
+ok   redact keeps a word that contains the user
 ok   launch report is under DECANT_HOME
+ok   launch report exists on disk
+ok   launch report names the launch id
+ok   launch report hides the home path
 ```
 
 count them with:

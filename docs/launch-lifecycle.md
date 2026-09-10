@@ -33,6 +33,10 @@ a phase never changes on a hope. each edge needs one named fact:
 `LaunchMachine.apply` accepts those edges and throws on everything else. it
 holds no `Process`, so the self-test drives it directly.
 
+decant reads no output from `scripts/decant-launch.sh`. the evidence for
+`requestSent` is the pid of the process decant spawned, and nothing else. the
+script prints for a person reading the log, not for decant to parse.
+
 ## timeouts
 
 `preparing` waits 90 seconds, because steam inside wine is slow on a cold
@@ -71,8 +75,10 @@ every launch has an id, and every phase it entered is one row in a stage log:
 the duration, an exit code when a process reported one, and the evidence that
 ended it. when a launch finishes or fails, decant writes `logs/launch-<id>.txt`
 with the id, the engine version, the stage log, and the tail of the log. the
-home path becomes `~`, and every line naming `loginusers`, `AccountName`,
-`Password` or `steamid` is dropped. `decant --export-launch` prints the newest
+home path becomes `~`, and the account name becomes `<user>` wherever it sits
+in a path segment: `drive_c/users/<name>`, `Z:\Users\<name>` and
+`C:\users\<name>` all get masked, in either slash direction. every line
+naming `loginusers`, `AccountName`, `Password` or `steamid` is dropped. `decant --export-launch` prints the newest
 report.
 
 `LaunchController` owns the session and is the only place that starts a launch
