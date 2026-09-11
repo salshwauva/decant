@@ -17,13 +17,8 @@ echo "== decant smoke =="
 [ -f scripts/decant-launch.sh ] && pass "decant-launch.sh" || bad "decant-launch.sh missing"
 [ -f scripts/bundle.sh ] && pass "bundle.sh" || bad "bundle.sh missing"
 
-# launch script must not use machine-wide kill patterns alone
-if grep -q 'wineserver -k' engine/scripts/launch-steam.sh \
-   && ! grep -q "kill -9 \$to_kill" engine/scripts/launch-steam.sh; then
-  pass "prefix-scoped kill (wineserver -k)"
-else
-  bad "launch-steam kill path still looks machine-wide"
-fi
+python3 -B -m unittest discover -s Tests/EngineTests -v
+swift test
 
 # dxmt release pin present
 if grep -q 'DXMT_SHA256=' engine/scripts/04-install-dxmt.sh; then
@@ -32,20 +27,9 @@ else
   bad "DXMT_SHA256 missing"
 fi
 
-# build binary if needed
-if [ ! -x .build/release/decant ] && [ ! -x build/decant.app/Contents/MacOS/decant ]; then
-  echo "(building release binary for self-test)"
-  swift build -c release
-fi
-
-BIN=""
-if [ -x build/decant.app/Contents/MacOS/decant ]; then
-  BIN=build/decant.app/Contents/MacOS/decant
-elif [ -x .build/release/decant ]; then
-  BIN=.build/release/decant
-else
-  BIN="$(swift build -c release --show-bin-path)/decant"
-fi
+# build the current source before any binary check.
+swift build -c release
+BIN="$(swift build -c release --show-bin-path)/decant"
 
 [ -x "$BIN" ] && pass "binary $BIN" || bad "no decant binary"
 

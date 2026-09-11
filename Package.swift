@@ -11,6 +11,7 @@ let package = Package(
         .executableTarget(
             name: "decant",
             path: "Sources/decant"
-        )
+        ),
+        .testTarget(name: "DecantTests", dependencies: ["decant"])
     ]
 )
