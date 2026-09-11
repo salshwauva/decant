@@ -22,7 +22,7 @@ mkdir -p "$APP/Contents/Resources/pour"
 cp Resources/pour/*.png "$APP/Contents/Resources/pour/"
 
 # deploy launch wrapper + engine recipe so the .app works without the git tree
-ENGINE_DIR="$HOME/Library/Application Support/decant/engine"
+ENGINE_DIR="${DECANT_HOME:-$HOME/Library/Application Support/decant}/engine"
 mkdir -p "$ENGINE_DIR"
 cp scripts/decant-launch.sh "$ENGINE_DIR/decant-launch.sh"
 chmod +x "$ENGINE_DIR/decant-launch.sh"

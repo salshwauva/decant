@@ -47,8 +47,9 @@ mkdir -p "$VENDOR_DIR"
 # -- Download -----------------------------------------------------------------
 if [[ ! -f "$TARBALL" ]]; then
     log_info "Downloading $DXMT_URL"
-    curl -fL --retry 3 --retry-delay 2 -o "$TARBALL" "$DXMT_URL" \
+    curl -fL --proto '=https' --proto-redir '=https' --retry 3 --retry-delay 2 -o "$TARBALL.part" "$DXMT_URL" \
         || die "Failed to download DXMT"
+    mv "$TARBALL.part" "$TARBALL"
 else
     log_ok "Tarball already present: $TARBALL"
 fi

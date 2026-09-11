@@ -85,10 +85,10 @@ fi
 # -- Smoke test ---------------------------------------------------------------
 log_info "Smoke-testing Wine binary"
 wine_version=$(run_x86_64 "$WINE_BIN" --version 2>&1 || true)
-if [[ "$wine_version" =~ ^wine- ]]; then
+if [[ "$wine_version" == "wine-11.0" ]]; then
     log_ok "Wine responds: $wine_version"
 else
-    die "Wine smoke test failed. Output: $wine_version"
+    die "Wine 11.0 is required for the patched driver. Found: $wine_version"
 fi
 
 log_ok "Wine + winetricks install complete"

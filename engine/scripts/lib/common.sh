@@ -134,3 +134,18 @@ wine_run() {
     WINEPREFIX="$WINEPREFIX" WINEDEBUG="$WINEDEBUG" \
         arch -x86_64 "$WINE_BIN" "$@"
 }
+
+prefix_steam_running() {
+    local pid
+    for pid in $(pgrep -if 'steam\.exe|steamwebhelper' 2>/dev/null || true); do
+        if ps eww -p "$pid" -o command= 2>/dev/null | python3 -c '
+import re, sys
+prefix = re.escape(sys.argv[1])
+pattern = r"(?:^| )WINEPREFIX=" + prefix + r"(?= [A-Za-z_][A-Za-z_0-9]*=|$)"
+sys.exit(0 if re.search(pattern, sys.stdin.read().rstrip()) else 1)
+' "$WINEPREFIX"; then
+            return 0
+        fi
+    done
+    return 1
+}

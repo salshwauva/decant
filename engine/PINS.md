@@ -10,8 +10,9 @@ an end-to-end game test.
 | Wine source (winemac rebuild) | tag **`wine-11.0`** | `WINE_BUILD_BRANCH` in `08-patch-wine-visibility.sh` |
 | DXMT release tarball | **v0.74** | `04-install-dxmt.sh` |
 | DXMT tarball SHA256 | `2598981a8b725653773e277470a95dda4253b8a14d36e0dc96dce0e3800f0ceb` | enforced in `04-install-dxmt.sh` |
-| DXMT fork (full D3D11 path) | branch `debug/present-path-tracing` on `notpop/dxmt` | set `DXMT_FORK_SHA=<40-char>` for a fixed commit |
+| DXMT fork (full D3D11 path) | `924a607e3eee06fad5be6f176d8510bb08bc418d` on `notpop/dxmt` | v0.6 window accessor and main-thread fix; game validation remains required |
 | LLVM (DXMT build) | tag **`llvmorg-15.0.7`** | `07-build-dxmt-fork.sh` |
+| Wine build toolchain | `v8.16-3shain/wine.tar.gz` | SHA256 `289c7f19e270a3d3d0a6fdb07691b176c70a0795f6811e5255cba82425de4f10`, measured from the HTTPS release asset on 2026-09-09 |
 | meson (DXMT build) | **1.10.x** (script pins 1.10.1 if host is 1.11+) | |
 | SteamSetup.exe | MZ header required; optional env `DECANT_STEAMSETUP_SHA256` | app-side in `SteamManager` |
 

@@ -88,13 +88,23 @@ done
 # keep a deployed recipe copy next to the runtime so launch-steam.sh and
 # the app always find scripts even if this git tree moves.
 DEPLOY="$DECANT_HOME/engine"
+LAUNCH_SOURCE="../scripts/decant-launch.sh"
+if [[ ! -f "$LAUNCH_SOURCE" ]]; then
+    LAUNCH_SOURCE="./decant-launch.sh"
+fi
+[[ -f "$LAUNCH_SOURCE" ]] || die "decant-launch.sh missing from the recipe"
 log_step "Deploy recipe scripts to $DEPLOY"
 mkdir -p "$DEPLOY"
 rsync -a --delete \
     --exclude 'vendor' \
     --exclude '.git' \
     --exclude '.DS_Store' \
+    --exclude '/decant-launch.sh' \
     ./ "$DEPLOY/"
+if [[ "$(cd "$(dirname "$LAUNCH_SOURCE")" && pwd)/decant-launch.sh" != "$DEPLOY/decant-launch.sh" ]]; then
+    install -m 755 "$LAUNCH_SOURCE" "$DEPLOY/decant-launch.sh"
+fi
+[[ -x "$DEPLOY/decant-launch.sh" ]] || die "Launcher deployment failed"
 log_ok "Recipe deployed"
 
 log_step "Done"

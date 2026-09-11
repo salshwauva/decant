@@ -31,34 +31,16 @@ else
     LOG_FILE="${STEAM_LAUNCH_LOG:-${TMPDIR:-/tmp}/decant-steam-launch.log}"
 fi
 
-# -- 1. Stop lingering processes for THIS bottle only ------------------------
-# never machine-wide pgrep/kill: that murders CrossOver and other prefixes.
-# wineserver -k with WINEPREFIX set tears down only this bottle's processes.
-log_step "Stopping Steam / Wine processes for this prefix only"
-log_info "WINEPREFIX=$WINEPREFIX"
-if [[ -x "$WINESERVER_BIN" ]]; then
-    WINEPREFIX="$WINEPREFIX" "$WINESERVER_BIN" -k 2>/dev/null || true
-    sleep 1
-    log_ok "wineserver -k issued for this prefix"
-else
-    log_warn "wineserver not found at $WINESERVER_BIN"
+# an active Steam session can own a game. Normal opens must preserve it.
+if prefix_steam_running; then
+    log_ok "Steam already runs in this prefix"
+    exit 0
 fi
 
-# residual PIDs whose environment still names this WINEPREFIX (macOS ps eww).
-# never kill a process that does not carry our prefix string.
-_kill_prefix_residuals() {
-    local prefix="$1"
-    local patterns='steam\.exe|steamwebhelper|steamservice|wine64-preloader|winedevice|wineserver|explorer\.exe'
-    local pid
-    for pid in $(pgrep -f "$patterns" 2>/dev/null || true); do
-        if ps eww -p "$pid" 2>/dev/null | grep -Fq "WINEPREFIX=${prefix}"; then
-            kill -9 "$pid" 2>/dev/null || true
-        fi
-    done
-}
-_kill_prefix_residuals "$WINEPREFIX"
-sleep 1
-log_ok "Prefix-scoped cleanup done"
+log_step "Stopping stale Wine processes for this prefix"
+[[ -x "$WINESERVER_BIN" ]] || die "wineserver missing at $WINESERVER_BIN"
+WINEPREFIX="$WINEPREFIX" "$WINESERVER_BIN" -k
+WINEPREFIX="$WINEPREFIX" "$WINESERVER_BIN" -w
 
 # -- 2. Purge Chromium SingletonLock -----------------------------------------
 # When Steam crashes on Wine, Chromium leaves SingletonLock* and Singleton*
@@ -325,7 +307,10 @@ else
 fi
 STEAM_PID=$!
 disown
-log_ok "Launched Steam (host pid=$STEAM_PID)"
+sleep 2
+kill -0 "$STEAM_PID" 2>/dev/null || prefix_steam_running \
+    || die "Steam exited during startup; see $LOG_FILE"
+log_ok "Steam startup requested (host pid=$STEAM_PID)"
 
 if [[ "${1:-}" == "--detach" ]]; then
     exit 0

@@ -16,7 +16,9 @@ STEAM_EXE="$STEAM_INSTALL_DIR/steam.exe"
 
 # Official Valve CDN. URL is stable; the installer self-updates on first run.
 SETUP_URL="https://cdn.cloudflare.steamstatic.com/client/installer/SteamSetup.exe"
-SETUP_DEST="${TMPDIR:-/tmp}/SteamSetup.exe"
+SETUP_DIR=$(mktemp -d "${TMPDIR:-/tmp}/decant-steam.XXXXXX")
+trap 'rm -rf "$SETUP_DIR"' EXIT
+SETUP_DEST="$SETUP_DIR/SteamSetup.exe"
 
 log_step "Installing Steam inside the Wine prefix"
 
@@ -27,14 +29,12 @@ fi
 
 # -- Download the installer ---------------------------------------------------
 log_info "Downloading $SETUP_URL"
-if ! curl -fL --retry 3 --retry-delay 2 -o "$SETUP_DEST" "$SETUP_URL"; then
+if ! curl -fL --proto '=https' --proto-redir '=https' --retry 3 --retry-delay 2 -o "$SETUP_DEST" "$SETUP_URL"; then
     die "Failed to download SteamSetup.exe"
 fi
 
-# Sanity check: Nullsoft installer carries an MZ header.
-if ! head -c 2 "$SETUP_DEST" | grep -q '^MZ'; then
-    die "Downloaded SteamSetup.exe is not a valid PE executable"
-fi
+python3 "$REPO_ROOT/scripts/lib/verify-pe.py" "$SETUP_DEST" \
+    || die "Downloaded SteamSetup.exe failed validation"
 log_ok "Downloaded $(wc -c < "$SETUP_DEST" | tr -d ' ') bytes"
 
 # -- Silent install -----------------------------------------------------------
@@ -49,6 +49,4 @@ fi
 size=$(stat -f%z "$STEAM_EXE" 2>/dev/null || echo 0)
 log_ok "Steam.exe installed ($size bytes)"
 
-# Leave the installer in TMPDIR — the OS will clean it up eventually,
-# and keeping it means re-running this script without network does nothing
-# surprising.
+# the exit trap removes the private installer directory.

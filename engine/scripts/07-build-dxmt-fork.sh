@@ -48,12 +48,12 @@ PREFIX_SYSWOW64="$WINEPREFIX/drive_c/windows/syswow64"
 
 DXMT_FORK_URL="https://github.com/notpop/dxmt.git"
 DXMT_FORK_BRANCH="debug/present-path-tracing"
-# pin when set (full 40-char sha). empty = track branch tip (less reproducible).
-# record the working sha in engine/PINS.md after a known-good build.
-# example: export DXMT_FORK_SHA=abc123... before install.sh
+DXMT_FORK_SHA="${DXMT_FORK_SHA:-924a607e3eee06fad5be6f176d8510bb08bc418d}"
+[[ "$DXMT_FORK_SHA" =~ ^[0-9a-f]{40}$ ]] || die "DXMT_FORK_SHA must be a full commit hash"
 LLVM_SRC_DIR="$DXMT_SRC/toolchains/llvm-src"
 LLVM_VERSION_TAG="llvmorg-15.0.7"
 WINE_TARBALL_URL="https://github.com/3Shain/wine/releases/download/v8.16-3shain/wine.tar.gz"
+WINE_TOOLCHAIN_SHA256="289c7f19e270a3d3d0a6fdb07691b176c70a0795f6811e5255cba82425de4f10"
 
 # ---------------------------------------------------------------------------
 # Step 1 — Homebrew tooling
@@ -100,13 +100,13 @@ if [[ -x "$MESON" ]]; then
     # DXMT's meson.build is incompatible with meson 1.11+.
     if (( _meson_maj > 1 || ( _meson_maj == 1 && _meson_min >= 11 ) )); then
         log_warn "meson ${_meson_maj}.${_meson_min} is too new for DXMT (need 1.10.x)."
-        log_warn "Pinning to meson==1.10.1 via pip --user."
-        python3 -m pip install --user 'meson==1.10.1' --quiet
+        log_warn "Pinning to meson==1.10.1 in the engine build environment."
+        python3 -m venv "$DECANT_HOME/build/meson-venv"
+        "$DECANT_HOME/build/meson-venv/bin/python" -m pip install 'meson==1.10.1' --quiet
 
         # Derive the user-base bin directory at runtime so it works on
         # any Python 3 minor version.
-        _user_base=$(python3 -m site --user-base)
-        MESON="$_user_base/bin/meson"
+        MESON="$DECANT_HOME/build/meson-venv/bin/meson"
         export MESON
 
         if [[ ! -x "$MESON" ]]; then
@@ -129,35 +129,16 @@ fi
 log_step "Step 3: DXMT source tree at $DXMT_SRC"
 
 if [[ ! -d "$DXMT_SRC" ]]; then
-    log_info "Cloning $DXMT_FORK_URL ($DXMT_FORK_BRANCH)"
     git clone --branch "$DXMT_FORK_BRANCH" "$DXMT_FORK_URL" "$DXMT_SRC"
-    log_ok "Clone complete"
-else
-    log_info "Existing clone found — fetching $DXMT_FORK_BRANCH"
-    git -C "$DXMT_SRC" fetch origin "$DXMT_FORK_BRANCH"
-
-    # Only fast-forward if the working tree is clean.
-    if git -C "$DXMT_SRC" diff --quiet && git -C "$DXMT_SRC" diff --cached --quiet; then
-        git -C "$DXMT_SRC" checkout "$DXMT_FORK_BRANCH"
-        git -C "$DXMT_SRC" merge --ff-only "origin/$DXMT_FORK_BRANCH" \
-            || log_warn "Fast-forward failed (diverged?). Using existing local HEAD."
-        log_ok "Updated to origin/$DXMT_FORK_BRANCH"
-    else
-        log_warn "Uncommitted changes detected in $DXMT_SRC — skipping merge."
-        log_warn "Commit or stash your changes and re-run to pull upstream updates."
-    fi
 fi
-
-if [[ -n "${DXMT_FORK_SHA:-}" ]]; then
-    log_info "Checking out pinned DXMT_FORK_SHA=$DXMT_FORK_SHA"
-    git -C "$DXMT_SRC" fetch --all --tags 2>/dev/null || true
-    git -C "$DXMT_SRC" checkout "$DXMT_FORK_SHA" \
-        || die "Could not checkout DXMT_FORK_SHA=$DXMT_FORK_SHA"
-    log_ok "DXMT at pinned commit $(git -C "$DXMT_SRC" rev-parse --short HEAD)"
-else
-    log_warn "DXMT_FORK_SHA unset — building branch tip of $DXMT_FORK_BRANCH (not fully reproducible)."
-    log_warn "After a good build: export DXMT_FORK_SHA=\$(git -C \"\$DXMT_SRC\" rev-parse HEAD) and record it in engine/PINS.md"
-fi
+[[ "$(git -C "$DXMT_SRC" remote get-url origin)" == "$DXMT_FORK_URL" ]] \
+    || die "DXMT checkout has an unexpected origin"
+git -C "$DXMT_SRC" diff --quiet HEAD -- \
+    || die "DXMT has local changes; the pinned build requires a clean source tree"
+git -C "$DXMT_SRC" fetch origin "$DXMT_FORK_SHA"
+git -C "$DXMT_SRC" checkout --detach "$DXMT_FORK_SHA"
+[[ "$(git -C "$DXMT_SRC" rev-parse HEAD)" == "$DXMT_FORK_SHA" ]] \
+    || die "DXMT checkout does not match the pin"
 
 log_info "Updating git submodules"
 git -C "$DXMT_SRC" submodule update --init --recursive
@@ -230,12 +211,15 @@ else
 
     if [[ ! -f "$_wine_tarball" ]]; then
         log_info "Downloading Wine toolchain from $WINE_TARBALL_URL"
-        curl -fL -o "$_wine_tarball" "$WINE_TARBALL_URL"
+        curl -fL --proto '=https' --proto-redir '=https' -o "$_wine_tarball.part" "$WINE_TARBALL_URL"
+        mv "$_wine_tarball.part" "$_wine_tarball"
         log_ok "Download complete"
     else
         log_info "Tarball already at $_wine_tarball — reusing"
     fi
 
+    [[ "$(shasum -a 256 "$_wine_tarball" | awk '{print $1}')" == "$WINE_TOOLCHAIN_SHA256" ]] \
+        || die "Wine toolchain checksum mismatch"
     log_info "Extracting Wine toolchain"
     tar -xzf "$_wine_tarball" -C "$_tc_parent"
 
@@ -350,8 +334,8 @@ find "$DXMT_SRC/build32" -name "*.dll" -print0 2>/dev/null | while IFS= read -r 
 done
 
 # The prefix's system32/syswow64 also need winemetal.dll.
-cp "$WINE_LIB_WIN64/winemetal.dll" "$PREFIX_SYS32/winemetal.dll" 2>/dev/null || true
-cp "$WINE_LIB_WIN32/winemetal.dll" "$PREFIX_SYSWOW64/winemetal.dll" 2>/dev/null || true
+cp "$WINE_LIB_WIN64/winemetal.dll" "$PREFIX_SYS32/winemetal.dll"
+cp "$WINE_LIB_WIN32/winemetal.dll" "$PREFIX_SYSWOW64/winemetal.dll"
 
 log_ok "DXMT fork build staged"
 log_info "Next: scripts/experimental/run-with-dxmt-debug.sh (DXMT_LOG_LEVEL=debug)"

@@ -23,6 +23,9 @@ require_wine_installed
 : "${WINE_BUILD_SRC:=$HOME/dev/wine-build/wine}"
 # pin Wine source tag used for the winemac.so rebuild (matches engine/PINS.md).
 : "${WINE_BUILD_BRANCH:=wine-11.0}"
+[[ "$(run_x86_64 "$WINE_BIN" --version)" == "wine-11.0" ]] \
+    || die "The driver rebuild requires a Wine 11.0 runtime"
+[[ "$WINE_BUILD_BRANCH" == "wine-11.0" ]] || die "The driver source must match Wine 11.0"
 
 WINE_UNIX_DIR="$WINE_APP/Contents/Resources/wine/lib/wine/x86_64-unix"
 
@@ -33,32 +36,23 @@ log_step "Checking if winemac.so is already patched"
 installed_so="$WINE_UNIX_DIR/winemac.so"
 [[ -f "$installed_so" ]] || die "winemac.so not found: $installed_so"
 
-installed_pub_count=$(nm -g "$installed_so" 2>/dev/null \
-    | awk '$2=="T"' \
-    | wc -l \
-    | tr -d ' ')
+verify_driver() {
+    local symbols symbol
+    symbols=$(nm -gU "$1" | awk '{print $NF}') || return 1
+    for symbol in _macdrv_get_cocoa_window _macdrv_view_create_metal_view _macdrv_view_get_metal_layer; do
+        grep -qx "$symbol" <<< "$symbols" || return 1
+    done
+}
 
-if (( installed_pub_count >= 100 )); then
-    log_ok "Already patched ($installed_pub_count public symbols in installed winemac.so). Nothing to do."
+if verify_driver "$installed_so"; then
+    log_ok "Installed winemac.so exports the required functions"
     exit 0
 fi
-log_info "Installed winemac.so has $installed_pub_count public symbols (need >= 100); proceeding."
-
-# -- Sentinel: built .so is newer than installed? -----------------------------
-
 built_so="$WINE_BUILD_SRC/build/dlls/winemac.drv/winemac.so"
-
-if [[ -f "$built_so" && "$built_so" -nt "$installed_so" ]]; then
-    log_ok "Built winemac.so ($built_so) is newer than installed; skipping to copy step."
-    # Jump straight to the copy/verify section below by setting a flag.
-    _SKIP_TO_COPY=1
-else
-    _SKIP_TO_COPY=0
-fi
 
 # -- Step 1: Install build-time dependencies ----------------------------------
 
-if (( _SKIP_TO_COPY == 0 )); then
+if ! verify_driver "$installed_so"; then
     log_step "Installing build-time dependencies"
 
     log_warn "This will take roughly 30 minutes to build Wine from source on first run."
@@ -85,13 +79,11 @@ if (( _SKIP_TO_COPY == 0 )); then
             || die "git clone of Wine failed"
         log_ok "Clone complete"
     else
-        log_info "Fetching $WINE_BUILD_BRANCH from upstream"
-        git -C "$WINE_BUILD_SRC" fetch --depth 1 origin "$WINE_BUILD_BRANCH" \
-            || log_warn "git fetch failed; proceeding with local source"
-        # fast-forward only; never reset the user's local edits
-        git -C "$WINE_BUILD_SRC" merge --ff-only "origin/$WINE_BUILD_BRANCH" 2>/dev/null \
-            || log_warn "Wine source tree has local changes; skipping ff-only merge"
-        log_ok "Source up to date"
+        git -C "$WINE_BUILD_SRC" diff --quiet HEAD -- \
+            || die "Wine source has local changes"
+        git -C "$WINE_BUILD_SRC" fetch origin "refs/tags/$WINE_BUILD_BRANCH:refs/tags/$WINE_BUILD_BRANCH"
+        git -C "$WINE_BUILD_SRC" checkout --detach "refs/tags/$WINE_BUILD_BRANCH"
+
     fi
 
     # -- Step 3: Configure ----------------------------------------------------
@@ -140,16 +132,7 @@ log_step "Sanity-checking built winemac.so"
 [[ -f "$built_so" ]] \
     || die "Built winemac.so not found after build step: $built_so"
 
-built_pub_count=$(nm -g "$built_so" 2>/dev/null \
-    | awk '$2=="T"' \
-    | wc -l \
-    | tr -d ' ')
-
-if (( built_pub_count < 100 )); then
-    die "Built winemac.so has only $built_pub_count public symbols (expected >= 100)." \
-        "The -fvisibility=default flag may not have taken effect. Check build logs."
-fi
-log_ok "Built winemac.so has $built_pub_count public symbols — looks correct."
+verify_driver "$built_so" || die "Built winemac.so lacks required public functions"
 
 # -- Step 6: Copy with backup -------------------------------------------------
 
@@ -158,8 +141,7 @@ log_step "Installing patched winemac.so into Wine bundle"
 backup="$WINE_UNIX_DIR/winemac.so.gcenx-backup"
 if [[ ! -f "$backup" ]]; then
     log_info "Creating backup of Gcenx-shipped winemac.so"
-    log_warn "sudo may prompt for your password (Wine bundle is under /Applications)."
-    sudo cp "$installed_so" "$backup" \
+    cp "$installed_so" "$backup" \
         || die "Failed to create backup at $backup"
     log_ok "Backup saved: $backup"
 else
@@ -167,8 +149,7 @@ else
 fi
 
 log_info "Copying patched winemac.so into $WINE_UNIX_DIR"
-log_warn "sudo may prompt for your password."
-sudo cp "$built_so" "$installed_so" \
+cp "$built_so" "$installed_so" \
     || die "Failed to copy patched winemac.so to $installed_so"
 log_ok "Installed patched winemac.so"
 
@@ -176,13 +157,5 @@ log_ok "Installed patched winemac.so"
 
 log_step "Verifying installed winemac.so"
 
-final_count=$(nm -g "$installed_so" 2>/dev/null \
-    | awk '$2=="T"' \
-    | wc -l \
-    | tr -d ' ')
-
-if (( final_count < 100 )); then
-    die "Installed winemac.so still has only $final_count public symbols after copy." \
-        "Something went wrong. Check $installed_so."
-fi
-log_ok "Installed winemac.so has $final_count public symbols. Patch applied successfully."
+verify_driver "$installed_so" || die "Installed winemac.so lacks required public functions"
+log_ok "Driver patch verified"
