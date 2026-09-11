@@ -36,7 +36,7 @@ enum GameIcon {
     // .desktop as Icon=<prefix>_<hash>.0. either yields the same hash, so
     // read whichever exists (the .url twin is often removed) rather than
     // depending on one.
-    private static func officialIcoPath(for game: Game, bottle: URL, desktop: URL) -> String? {
+    static func officialIcoPath(for game: Game, bottle: URL, desktop: URL) -> String? {
         let gamesDir = bottle.appendingPathComponent("drive_c/Program Files (x86)/Steam/steam/games")
         for ext in ["desktop", "url"] {
             let file = desktop.appendingPathComponent("\(game.name).\(ext)")
@@ -201,23 +201,44 @@ enum GameIconTheme {
 // it notices a game installed, always blank-iconed and extension-bare, so
 // this is safe and cheap to re-run on every refresh.
 enum DesktopShortcuts {
+    private static var fingerprints: [String: String] = [:]
     private static var desktop: URL {
         FileManager.default.urls(for: .desktopDirectory, in: .userDomainMask).first!
     }
 
     static func retheme(_ games: [Game], bottle: URL) {
+        let active = Set(games.map { bottle.path + "/" + $0.appID })
+        fingerprints = fingerprints.filter { active.contains($0.key) }
         for game in games {
+            guard !game.name.contains("/"), game.name != ".", game.name != ".." else { continue }
+            let files = ["desktop", "url"].map { desktop.appendingPathComponent("\(game.name).\($0)") }
+                .filter { file in
+                    let info = try? file.resourceValues(forKeys: [.isRegularFileKey, .isSymbolicLinkKey])
+                    guard info?.isRegularFile == true, info?.isSymbolicLink != true,
+                          let text = try? String(contentsOf: file, encoding: .utf8) else { return false }
+                    let pattern = "steam://(?:rungameid|run)/" + game.appID + "(?:[^0-9]|$)"
+                    return text.range(of: pattern, options: .regularExpression) != nil
+                }
+            guard !files.isEmpty else { continue }
+            let key = bottle.path + "/" + game.appID
+            let iconPath = GameIcon.officialIcoPath(for: game, bottle: bottle, desktop: desktop)
+            let inputs = files + (iconPath.map { [URL(fileURLWithPath: $0)] } ?? [])
+            let fingerprint = inputs.map { file -> String in
+                let attrs = try? FileManager.default.attributesOfItem(atPath: file.path)
+                return "\(file.path):\(attrs?[.modificationDate] ?? ""): \(attrs?[.systemFileNumber] ?? ""): \(attrs?[.size] ?? "")"
+            }.joined(separator: "|")
+            guard fingerprints[key] != fingerprint else { continue }
             let icon = GameIcon.official(for: game, bottle: bottle, desktop: desktop)
                 ?? GameIconTheme.icon(for: game)
-            for ext in ["desktop", "url"] {
-                var file = desktop.appendingPathComponent("\(game.name).\(ext)")
-                guard FileManager.default.fileExists(atPath: file.path) else { continue }
-                NSWorkspace.shared.setIcon(icon, forFile: file.path, options: [])
+            var succeeded = true
+            for var file in files {
+                succeeded = NSWorkspace.shared.setIcon(icon, forFile: file.path, options: []) && succeeded
                 // show the label as just the game name, not "<game>.desktop".
                 var values = URLResourceValues()
                 values.hasHiddenExtension = true
-                try? file.setResourceValues(values)
+                do { try file.setResourceValues(values) } catch { succeeded = false }
             }
+            if succeeded { fingerprints[key] = fingerprint }
         }
     }
 }

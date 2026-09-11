@@ -22,7 +22,7 @@ enum Housekeeping {
     static var dumpCapBytes: UInt64 {
         let gib: UInt64 = 1024 * 1024 * 1024
         if let s = ProcessInfo.processInfo.environment["DECANT_DUMP_CAP_GB"],
-           let g = Double(s), g > 0 {
+           let g = Double(s), g.isFinite, g > 0, g * Double(gib) < Double(UInt64.max) {
             return UInt64(g * Double(gib))
         }
         return 10 * gib
@@ -44,7 +44,11 @@ enum Housekeeping {
                 dirs.append(users.appendingPathComponent("\(u)/Temp/dumps", isDirectory: true))
             }
         }
-        return dirs.filter { fm.fileExists(atPath: $0.path) }
+        let root = bottle.resolvingSymlinksInPath().standardizedFileURL.path + "/"
+        return dirs.filter {
+            fm.fileExists(atPath: $0.path)
+                && $0.resolvingSymlinksInPath().standardizedFileURL.path.hasPrefix(root)
+        }
     }
 
     // recursive byte size of a directory, counting regular files only.
@@ -75,12 +79,20 @@ enum Housekeeping {
     // if dumps have crossed the cap, delete them. returns bytes freed (0 if
     // under the cap or nothing to clear).
     @discardableResult
-    static func trimDumps(_ bottle: URL, cap: UInt64 = dumpCapBytes) -> UInt64 {
-        let report = evaluateDumps(bottle, cap: cap)
+    static func trimDumps(_ bottle: URL, cap: UInt64 = dumpCapBytes) throws -> UInt64 {
+        try trimDumps(evaluateDumps(bottle, cap: cap))
+    }
+
+    static func trimDumps(_ report: DumpReport) throws -> UInt64 {
         guard report.overCap else { return 0 }
         let fm = FileManager.default
-        for d in report.dirs { try? fm.removeItem(at: d) }
-        return report.bytes
+        var freed: UInt64 = 0
+        for d in report.dirs {
+            let bytes = dirSize(d)
+            try fm.removeItem(at: d)
+            freed += bytes
+        }
+        return freed
     }
 
     static func human(_ bytes: UInt64) -> String {

@@ -30,7 +30,7 @@ enum SelfTest {
 
         // support package filter
         check("filter redistributable",
-              SteamManager.isSupportPackage(appID: "1", name: "DirectX Redistributable"))
+              SteamManager.isSupportPackage(appID: "228980", name: "DirectX Redistributable"))
         check("filter junk id",
               SteamManager.isSupportPackage(appID: "228980", name: "Anything"))
         check("keep real game",

@@ -11,6 +11,8 @@ struct ContentView: View {
     @State private var banner: String? = nil
     @State private var bannerIsError = true
     @State private var dumpSummary: String? = nil
+    @State private var operationInProgress = false
+    @State private var refreshing = false
 
     private var bottle: URL { EnginePaths.bottle(EngineManager.defaultBottle) }
 
@@ -58,7 +60,7 @@ struct ContentView: View {
         .sheet(item: $selectedGame) { game in
             GameDetailView(
                 game: game,
-                isLaunching: launching == game.appID,
+                isLaunching: operationInProgress,
                 onPlay: { play(game) },
                 onClose: { selectedGame = nil },
                 onUninstall: { uninstall(game) }
@@ -107,7 +109,9 @@ struct ContentView: View {
             PixelButton(label: "＋  add a game", top: Palette.wineHi, bottom: Palette.wine, text: Palette.cream, action: openSteam)
             Spacer()
             PixelButton(label: "⟳  refresh", top: Palette.cork, bottom: Palette.corkDk, text: Palette.cream, action: refresh)
+                .disabled(refreshing)
         }
+        .disabled(operationInProgress)
     }
 
     // the help link, sitting below the cellar rather than in the top toolbar.
@@ -204,6 +208,8 @@ struct ContentView: View {
             return "engine not installed yet.\nfrom the monorepo:  bash engine/install.sh"
         case .engineNoBottle:
             return "engine is in, but there is no bottle yet.\nrun:  decant --init-bottle  then  decant --install-steam"
+        case .incomplete(_, _, let issues):
+            return issues.first ?? "engine setup is incomplete"
         case .ready:
             return "hit \u{201c}add a game\u{201d}, install a windows game in steam,\nthen refresh. it shows up here."
         }
@@ -277,18 +283,25 @@ struct ContentView: View {
     // MARK: actions
 
     private func refresh() {
-        status = EngineManager.status()
-        games = SteamManager.installedGames(bottle)
-        if case .ready(_, let b) = status {
-            let report = Housekeeping.evaluateDumps(b)
-            dumpSummary = report.summary
-        } else {
-            dumpSummary = nil
+        guard !refreshing else { return }
+        refreshing = true
+        let b = bottle
+        DispatchQueue.global(qos: .userInitiated).async {
+            let current = EngineManager.status()
+            let scan = Result { try SteamManager.installedGames(b) }
+            let summary = Housekeeping.evaluateDumps(b).summary
+            DispatchQueue.main.async {
+                status = current
+                dumpSummary = summary
+                refreshing = false
+                switch scan {
+                case .success(let library):
+                    games = library
+                    DesktopShortcuts.retheme(library, bottle: b)
+                case .failure(let error): showError(error)
+                }
+            }
         }
-        // steam-under-wine drops a fresh, genericly-iconed shortcut on the
-        // real desktop for any newly installed game, so this re-applies
-        // the official steam icon and clean name every refresh.
-        DesktopShortcuts.retheme(games, bottle: bottle)
     }
 
     private func showError(_ error: Error) {
@@ -303,39 +316,44 @@ struct ContentView: View {
     }
 
     private func openSteam() {
-        do {
-            let (engine, b) = try EngineManager.requireReady()
-            let note = try SteamManager.launchClient(b, engine: engine)
-            if let note { showNote(note) } else { banner = nil }
-        } catch {
-            showError(error)
+        performRequest {
+            let (engine, b) = try EngineManager.requireSteam()
+            return try SteamManager.launchClient(b, engine: engine)
         }
     }
 
     private func play(_ game: Game) {
-        do {
+        guard !operationInProgress else { return }
+        launching = game.appID
+        performRequest {
             let (engine, b) = try EngineManager.requireReady()
-            launching = game.appID
-            let note = try SteamManager.launchGame(appID: game.appID, bottle: b, engine: engine)
-            if let note { showNote(note) } else { banner = nil }
-            // clear the launching pip after a moment (the game spins up detached)
-            DispatchQueue.main.asyncAfter(deadline: .now() + 6) {
-                if launching == game.appID { launching = nil }
-            }
-        } catch {
-            launching = nil
-            showError(error)
+            return try SteamManager.launchGame(appID: game.appID, bottle: b, engine: engine)
         }
     }
 
     private func uninstall(_ game: Game) {
-        do {
-            let (engine, b) = try EngineManager.requireReady()
+        performRequest {
+            let (engine, b) = try EngineManager.requireSteam()
             try SteamManager.uninstallGame(appID: game.appID, bottle: b, engine: engine)
-            selectedGame = nil
-            banner = nil
-        } catch {
-            showError(error)
+            return "uninstall request sent to steam"
+        }
+    }
+
+    private func performRequest(_ work: @escaping () throws -> String?) {
+        guard !operationInProgress else { return }
+        operationInProgress = true
+        banner = nil
+        DispatchQueue.global(qos: .userInitiated).async {
+            let result = Result { try work() }
+            DispatchQueue.main.async {
+                operationInProgress = false
+                launching = nil
+                switch result {
+                case .success(let note):
+                    if let note { showNote(note) }
+                case .failure(let error): showError(error)
+                }
+            }
         }
     }
 }

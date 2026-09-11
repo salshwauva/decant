@@ -109,7 +109,7 @@ struct GameDetailView: View {
                     .tracking(2)
                     .foregroundColor(Palette.inkMut)
                 Divider().overlay(Palette.labelEdge).padding(.top, 5)
-                Text(isLaunching ? "pouring… · wine 11 + dxmt" : "ready to play · wine 11 + dxmt")
+                Text(isLaunching ? "request in progress · wine 11 + dxmt" : "launch through steam · wine 11 + dxmt")
                     .font(.system(size: 11, design: .monospaced))
                     .foregroundColor(Palette.inkDim)
                     .padding(.top, 5)

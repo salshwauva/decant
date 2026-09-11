@@ -1,4 +1,5 @@
 import Foundation
+import Darwin
 
 // append-only structured log under Application Support/decant/logs.
 // launch failures, dump trims, and doctor notes go here so the gui can
@@ -15,14 +16,14 @@ enum DecantLog {
     // rotate when past this size so the file stays readable.
     private static let maxBytes: UInt64 = 2 * 1024 * 1024
 
-    static func ensureFile() throws -> URL {
+    private static func ensureFile() throws -> URL {
         let fm = FileManager.default
         try fm.createDirectory(at: directory, withIntermediateDirectories: true)
         let url = fileURL
-        if !fm.fileExists(atPath: url.path) {
-            fm.createFile(atPath: url.path, contents: nil)
-        }
-        rotateIfNeeded(url)
+        let fd = open(url.path, O_WRONLY | O_CREAT | O_APPEND | O_NOFOLLOW, 0o600)
+        guard fd >= 0 else { throw POSIXError(POSIXErrorCode(rawValue: errno) ?? .EIO) }
+        close(fd)
+        try rotateIfNeeded(url)
         return url
     }
 
@@ -30,29 +31,35 @@ enum DecantLog {
         let stamp = ISO8601DateFormatter().string(from: Date())
         let row = "[\(stamp)] \(message)\n"
         do {
+            let fm = FileManager.default
+            try fm.createDirectory(at: directory, withIntermediateDirectories: true,
+                                   attributes: [.posixPermissions: 0o700])
+            let lock = open(directory.appendingPathComponent(".lock").path,
+                            O_WRONLY | O_CREAT | O_NOFOLLOW, 0o600)
+            guard lock >= 0 else { throw POSIXError(POSIXErrorCode(rawValue: errno) ?? .EIO) }
+            defer { flock(lock, LOCK_UN); close(lock) }
+            guard flock(lock, LOCK_EX) == 0 else { throw POSIXError(.EIO) }
             let url = try ensureFile()
-            let handle = try FileHandle(forWritingTo: url)
+            let fd = open(url.path, O_WRONLY | O_CREAT | O_APPEND | O_NOFOLLOW, 0o600)
+            guard fd >= 0 else { throw POSIXError(POSIXErrorCode(rawValue: errno) ?? .EIO) }
+            let handle = FileHandle(fileDescriptor: fd, closeOnDealloc: true)
             defer { try? handle.close() }
-            try handle.seekToEnd()
-            if let data = row.data(using: .utf8) {
-                try handle.write(contentsOf: data)
-            }
+            try handle.write(contentsOf: Data(row.utf8))
         } catch {
             FileHandle.standardError.write(Data("decant log failed: \(error)\n".utf8))
         }
         FileHandle.standardError.write(Data(row.utf8))
     }
 
-    private static func rotateIfNeeded(_ url: URL) {
+    private static func rotateIfNeeded(_ url: URL) throws {
         let fm = FileManager.default
         guard let attrs = try? fm.attributesOfItem(atPath: url.path),
               let size = attrs[.size] as? UInt64,
               size > maxBytes
         else { return }
         let bak = url.deletingLastPathComponent().appendingPathComponent("decant.log.1")
-        try? fm.removeItem(at: bak)
-        try? fm.moveItem(at: url, to: bak)
-        fm.createFile(atPath: url.path, contents: nil)
+        if fm.fileExists(atPath: bak.path) { try fm.removeItem(at: bak) }
+        try fm.moveItem(at: url, to: bak)
     }
 
     // last non-empty lines for gui banners (best-effort, small files).

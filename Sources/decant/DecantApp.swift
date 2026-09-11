@@ -27,8 +27,7 @@ private func handleCLI() {
     let bottle = EnginePaths.bottle(EngineManager.defaultBottle)
 
     if args.contains("--doctor") {
-        EngineManager.doctor()
-        exit(0)
+        exit(EngineManager.doctor() ? 0 : 1)
     }
 
     if args.contains("--self-test") {
@@ -61,8 +60,9 @@ private func handleCLI() {
 
     if args.contains("--steam") {
         runOrDie {
-            try SteamManager.launchClient(bottle, engine: try requireEngine())
-            print("decant: launched steam client (sign in there)")
+            let (engine, bottle) = try EngineManager.requireSteam()
+            try SteamManager.launchClient(bottle, engine: engine)
+            print("decant: steam open request sent (sign in there)")
         }
     }
 
@@ -70,7 +70,11 @@ private func handleCLI() {
         let report = Housekeeping.evaluateDumps(bottle)
         print("decant: \(report.summary)")
         if report.overCap {
-            let freed = Housekeeping.trimDumps(bottle)
+            let freed: UInt64
+            do { freed = try Housekeeping.trimDumps(report) } catch {
+                print("decant: dump cleanup failed: \(error)")
+                exit(1)
+            }
             print("decant: over cap, cleared \(Housekeeping.human(freed))")
             DecantLog.line("gc cleared \(Housekeeping.human(freed)) dumps")
         } else {
@@ -80,24 +84,27 @@ private func handleCLI() {
     }
 
     if args.contains("--games") {
-        let games = SteamManager.installedGames(bottle)
-        if games.isEmpty { print("decant: no games installed in the bottle yet") }
-        for g in games { print("  \(g.appID)\t\(g.name)") }
-        exit(0)
+        runOrDie {
+            let games = try SteamManager.installedGames(bottle)
+            if games.isEmpty { print("decant: no games installed in the bottle yet") }
+            for g in games { print("  \(g.appID)\t\(g.name)") }
+        }
     }
 
     if args.contains("--theme-icons") {
-        let games = SteamManager.installedGames(bottle)
-        DesktopShortcuts.retheme(games, bottle: bottle)
-        print("decant: re-themed desktop icons for \(games.count) game\(games.count == 1 ? "" : "s")")
-        exit(0)
+        runOrDie {
+            let games = try SteamManager.installedGames(bottle)
+            DesktopShortcuts.retheme(games, bottle: bottle)
+            print("decant: desktop icons checked for \(games.count) games")
+        }
     }
 
     if let i = args.firstIndex(of: "--play"), i + 1 < args.count {
         let appid = args[i + 1]
         runOrDie {
-            try SteamManager.launchGame(appID: appid, bottle: bottle, engine: try requireEngine())
-            print("decant: launching app \(appid)")
+            let (engine, bottle) = try EngineManager.requireReady()
+            try SteamManager.launchGame(appID: appid, bottle: bottle, engine: engine)
+            print("decant: launch request sent for app \(appid)")
         }
     }
 }
