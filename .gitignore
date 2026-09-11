@@ -10,3 +10,9 @@ engine/wrapper/*.o
 engine/**/*.dll
 engine/**/*.so
 engine/**/*.exe
+
+# agent files
+CLAUDE.md
+AGENTS.md
+GEMINI.md
+.claude/
