@@ -2,7 +2,7 @@
 
 Reviewed September 9, 2026, at repository revision `bbb4e07`.
 
-This document records the original review. The subsequent fixes and remaining limits appear in [the security and test plan](/Users/sophia/projects/decant/docs/security-and-test-plan.md).
+This document records the original review. The subsequent fixes and remaining limits appear in [the security and test plan](docs/security-and-test-plan.md).
 
 This guide explains the code for Sophia to study. It does not attribute authorship of imported work to her.
 
@@ -37,7 +37,7 @@ The first build attempt encountered sandbox restrictions on compiler caches. The
 
 ### 1. P1: an engine reinstall removes the UI launcher
 
-Source: [engine/install.sh:93](/Users/sophia/projects/decant/engine/install.sh:93).
+Source: [engine/install.sh:93](engine/install.sh:93).
 
 The installer copies `engine/` into the deployed engine directory with `rsync --delete`. The deployed directory also contains `decant-launch.sh`.
 
@@ -53,7 +53,7 @@ Improvement: give one deployment step ownership of the complete runtime recipe, 
 
 ### 2. P1: the UI cannot report failures after the shell starts
 
-Sources: [Engine.swift:175](/Users/sophia/projects/decant/Sources/decant/Engine.swift:175), [SteamManager.swift:104](/Users/sophia/projects/decant/Sources/decant/SteamManager.swift:104), [ContentView.swift:315](/Users/sophia/projects/decant/Sources/decant/ContentView.swift:315).
+Sources: [Engine.swift:175](Sources/decant/Engine.swift:175), [SteamManager.swift:104](Sources/decant/SteamManager.swift:104), [ContentView.swift:315](Sources/decant/ContentView.swift:315).
 
 `spawn` returns a process identifier immediately after `Process.run()`. That proves Bash started. It does not prove the script completed or the game opened.
 
@@ -69,7 +69,7 @@ The shell also detaches Wine, so observing Bash alone cannot establish game heal
 
 ### 3. P2: session checks can accept another bottle or an old login
 
-Source: [scripts/decant-launch.sh:35](/Users/sophia/projects/decant/scripts/decant-launch.sh:35).
+Source: [scripts/decant-launch.sh:35](scripts/decant-launch.sh:35).
 
 `steam_running` searches the whole machine for `steamwebhelper.exe`. A helper from another Wine prefix can cause Decant to skip its own Steam setup.
 
@@ -85,7 +85,7 @@ The lower-level cleanup script already scopes its primary stop command through `
 
 ### 4. P2: the ready state does not establish that the engine can launch
 
-Source: [Engine.swift:98](/Users/sophia/projects/decant/Sources/decant/Engine.swift:98).
+Source: [Engine.swift:98](Sources/decant/Engine.swift:98).
 
 The ready state requires an executable at the Wine path and a `drive_c/windows/system32` directory. It does not require Steam, DXMT, or the patched driver.
 
@@ -97,7 +97,7 @@ Improvement: validate required artifacts and their versions. Separate basic Wine
 
 ### 5. P2: the documented dependency pins do not guarantee a matching build
 
-Sources: [01-install-wine.sh:27](/Users/sophia/projects/decant/engine/scripts/01-install-wine.sh:27), [07-build-dxmt-fork.sh:131](/Users/sophia/projects/decant/engine/scripts/07-build-dxmt-fork.sh:131), [08-patch-wine-visibility.sh:25](/Users/sophia/projects/decant/engine/scripts/08-patch-wine-visibility.sh:25).
+Sources: [01-install-wine.sh:27](engine/scripts/01-install-wine.sh:27), [07-build-dxmt-fork.sh:131](engine/scripts/07-build-dxmt-fork.sh:131), [08-patch-wine-visibility.sh:25](engine/scripts/08-patch-wine-visibility.sh:25).
 
 The Wine installer accepts the current `wine-stable` cask or an existing installation. Its version check only requires output that starts with `wine-`.
 
@@ -141,7 +141,7 @@ Decant's engine is the installation and launch recipe that makes those component
 
 ### Installation is a sequence with dependencies
 
-Source: [engine/install.sh](/Users/sophia/projects/decant/engine/install.sh).
+Source: [engine/install.sh](engine/install.sh).
 
 The installer represents its steps as arrays of script paths. It executes them sequentially because later steps require earlier outputs.
 
@@ -187,7 +187,7 @@ Per-game compatibility settings would be a reasonable extension after the curren
 
 ### Steam session preparation
 
-Source: [launch-steam.sh](/Users/sophia/projects/decant/engine/scripts/launch-steam.sh).
+Source: [launch-steam.sh](engine/scripts/launch-steam.sh).
 
 The script stops the current bottle's Wine session, removes stale Chromium locks, and checks whether Steam replaced the helper wrapper.
 
@@ -203,7 +203,7 @@ A normal open action should reuse a healthy session. Session repair should be a 
 
 ### The C wrapper is a process adapter
 
-Source: [steamwebhelper-wrapper.c](/Users/sophia/projects/decant/engine/wrapper/src/steamwebhelper-wrapper.c).
+Source: [steamwebhelper-wrapper.c](engine/wrapper/src/steamwebhelper-wrapper.c).
 
 Steam launches its web helper by filename. The installer puts Decant's wrapper at that filename and retains Valve's helper as `steamwebhelper_real.exe`.
 
@@ -223,7 +223,7 @@ The wrapper changes Steam's browser behavior. It does not disable DXMT for games
 
 ### Why the Wine and DXMT patches matter
 
-Source: [dxmt-diagnosis.md:201](/Users/sophia/projects/decant/engine/docs/dxmt-diagnosis.md:201).
+Source: [dxmt-diagnosis.md:201](engine/docs/dxmt-diagnosis.md:201).
 
 The repository's imported diagnosis records three separate failures. I reviewed the diagnosis and local build scripts, but could not inspect the external fork source.
 
@@ -297,7 +297,7 @@ AppKit supplies Finder icon changes and bitmap drawing. CoreText registers the b
 
 ### Game discovery
 
-Source: [SteamManager.swift:140](/Users/sophia/projects/decant/Sources/decant/SteamManager.swift:140).
+Source: [SteamManager.swift:140](Sources/decant/SteamManager.swift:140).
 
 Steam's manifest files provide the installed app ID and name. The launcher scans the default library and paths from `libraryfolders.vdf`.
 
@@ -449,7 +449,7 @@ Present Decant as a native macOS game launcher that packages and controls a Wine
 
 Explain that its local back end manages runtime setup, installed-game discovery, process launch, and maintenance.
 
-The ownership boundary matters. [engine/NOTICE](/Users/sophia/projects/decant/engine/NOTICE) attributes the imported recipe to `notpop/steam-on-m1-wine` at `540037e`.
+The ownership boundary matters. [engine/NOTICE](engine/NOTICE) attributes the imported recipe to `notpop/steam-on-m1-wine` at `540037e`.
 
 It lists local changes such as Decant paths, writable Wine deployment, recipe deployment, and prefix-scoped cleanup.
 
