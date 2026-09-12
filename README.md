@@ -1,95 +1,76 @@
-# decant
+# Decant
 
-a cozy launcher for windows-only steam games on apple silicon. one project:
-the **engine** (wine 11 + dxmt install and launch scripts) and the **ui**
-(swiftui shelf that drives it).
+Decant is a macOS launcher for Windows Steam games on Apple Silicon. It pairs a SwiftUI game library with scripts that install Wine, DXMT, and Windows Steam.
 
-decant does not emulate a cpu. the hard work is done by tools that already
-exist:
+The app finds installed games, launches them by Steam app ID, and shows engine status and launch errors. A pixel-art shelf presents the library.
 
-- rosetta 2 translates the x86-64 instructions (built into macos)
-- wine provides the windows api and loads the program
-- dxmt turns the game's directx calls into metal
+## How it works
 
-on macos 26, off-the-shelf stacks (game porting toolkit, whisky, crossover,
-mythic) fell over. the engine half of this repo builds a working free path:
-wine 11 with a rebuilt winemac driver and dxmt, under
-`~/Library/Application Support/decant`. the ui detects that stack, installs
-windows steam into a bottle, lists your games, and launches them.
+Rosetta 2 translates x86-64 instructions. Wine provides the Windows APIs. DXMT translates supported Direct3D calls to Metal. Decant installs this stack and connects it to the game library.
 
-## layout
+The engine and Steam bottle live under `~/Library/Application Support/decant`. The repository contains the install recipe and the SwiftUI app.
 
-```
-decant/
-  engine/           # one-time wine + dxmt + steam bottle setup (scripts)
-  Sources/decant/   # swiftui app
-  scripts/          # bundle.sh, decant-launch.sh
-  Resources/        # fonts, pour frames, icons
-```
+## Requirements
 
-the engine scripts started from
-[notpop/steam-on-m1-wine](https://github.com/notpop/steam-on-m1-wine) (MIT,
-base `540037e`) and live here as the owned recipe. attribution:
-`engine/NOTICE`.
+- An Apple Silicon Mac. The engine recipe targets macOS 26; older releases are untested.
+- Rosetta 2.
+- Homebrew at `/opt/homebrew` and the Xcode Command Line Tools.
+- At least 10 GB of free space for setup, plus space for games.
 
-## setup
+## Build and run
 
-### 1. build the engine (once, ~1 hour first run)
+From the repository root, install the engine:
 
-```bash
+```sh
 bash engine/install.sh
 ```
 
-that installs wine, creates the bottle, wires steam + dxmt, and deploys the
-recipe under Application Support. `--minimal` stops before the long dxmt/wine
-rebuilds if you only need the steam ui.
+The first install includes Wine and DXMT builds and can take about an hour. The `--minimal` option skips those rebuilds.
 
-### 2. build the ui
+Build the app bundle:
 
-needs the swift toolchain from the command line tools. no full xcode project.
-
-```bash
-./scripts/bundle.sh        # builds build/decant.app, deploys launch scripts
+```sh
+./scripts/bundle.sh
 open build/decant.app
 ```
 
-if the engine is missing, the app reports it as not ready and points at the
-setup guide (`engine/install.sh`).
+The bundle script also deploys the launch scripts. The app reports a missing engine until the engine install completes.
 
-## scope and honesty
+## Compatibility
 
-works: single-player and many online titles run through this stack.
+The project records successful runs of Fields of Mistria, Kynseed, and Travellers Rest. These results do not establish compatibility with other games.
 
-does not work, ever, on macos: games with kernel level anti cheat (a lot of
-competitive multiplayer). no launcher can change that.
+Games that require Windows kernel anti-cheat are outside the supported scope. Compatibility depends on the game and the Wine and DXMT versions.
 
-confirmed running: fields of mistria, kynseed, travellers rest. cozy, 2d,
-single player, no anti cheat.
+## Checks and diagnostics
 
-## checks
+Run the Swift and engine tests without a game launch:
 
-```bash
-./scripts/smoke.sh          # paths, pins, --self-test, --doctor
-decant --self-test          # pure logic only
-decant --doctor             # engine / bottle / dumps / launch script
-decant --log                # print log path + tail
-decant --gc                 # report / trim crash dumps
+```sh
+swift test
+python3 -B -m unittest discover -s Tests/EngineTests -v
 ```
 
-logs land in `~/Library/Application Support/decant/logs/decant.log`.
-the ui ledger has a **log** link; launch errors show as a banner.
+After engine setup, run the smoke checks:
 
-pins: `engine/PINS.md`.
+```sh
+./scripts/smoke.sh
+```
 
-## status
+The executable also supports `--self-test`, `--doctor`, and `--log`. Logs live at `~/Library/Application Support/decant/logs/decant.log`.
 
-- engine recipe in-repo, install defaults to Application Support/decant (done)
-- cozy pixel swiftui library ui (done)
-- engine manager: detect wine 11 + dxmt bottle (done)
-- install windows steam, scan the library, find owned games (done)
-- launch a game by steam app id, with the directx-to-metal env (done)
-- add and uninstall games through steam, themed desktop icons, pour animation (done)
-- gui launch errors, honest status, prefix-scoped kills, structured logs (done)
+## Source map
 
-this is the opposite end from [wisp](../wisp): wisp emulates a cpu from
-scratch for a toy program; decant runs real games on a mature stack.
+| Path | Purpose |
+| --- | --- |
+| `Sources/decant/` | SwiftUI app, game library, and engine control |
+| `engine/` | Wine, DXMT, and Steam install recipe |
+| `scripts/` | App bundle and launch scripts |
+| `Tests/` | Swift tests and engine tests |
+| `Resources/` | Fonts, icons, and animation frames |
+
+## Dependencies and credits
+
+The engine scripts derive from [notpop/steam-on-m1-wine](https://github.com/notpop/steam-on-m1-wine), under the MIT license, at base commit `540037e`.
+
+The [engine notice](engine/NOTICE) preserves that credit. [Engine pins](engine/PINS.md) records dependency versions.
