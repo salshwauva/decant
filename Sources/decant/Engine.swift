@@ -29,18 +29,39 @@ enum DecantError: Error, CustomStringConvertible {
 enum EnginePaths {
     // only the monorepo engine install counts: patched wine 11 under
     // Application Support/decant (rebuilt winemac.so + dxmt).
+    static let wineAppRelative = "Wine Stable.app/Contents/Resources/wine/bin/wine"
+
+    static var engines: URL { support.appendingPathComponent("engines", isDirectory: true) }
+
+    // the engine store points engines/current at the active version. an
+    // install made before the store existed has only engines/wine11, so fall
+    // back to it until the next install.
     static var wineBinary: String {
-        support.appendingPathComponent(
-            "engines/wine11/Wine Stable.app/Contents/Resources/wine/bin/wine"
-        ).path
+        let current = engines.appendingPathComponent("current")
+            .appendingPathComponent(wineAppRelative)
+        if FileManager.default.fileExists(atPath: current.path) { return current.path }
+        return engines.appendingPathComponent("wine11")
+            .appendingPathComponent(wineAppRelative).path
     }
 
+    // the engine store for the real support directory.
+    static var store: EngineStore { EngineStore(root: engines) }
+
+    // DECANT_HOME moves the whole engine home. the shell scripts already
+    // honor it, so a test run can point both halves at a temp directory.
     static var support: URL {
         if let path = ProcessInfo.processInfo.environment["DECANT_HOME"], !path.isEmpty {
             return URL(fileURLWithPath: path, isDirectory: true)
         }
         return FileManager.default.homeDirectoryForCurrentUser
             .appendingPathComponent("Library/Application Support/decant", isDirectory: true)
+    }
+
+    // which engine a launch ran on. installs made before the engine store
+    // have no version id, so they report the old layout by name.
+    static var engineVersionLabel: String {
+        if let id = try? store.activeID(), !id.isEmpty { return id }
+        return "legacy-wine11"
     }
     static var bottles: URL { support.appendingPathComponent("bottles", isDirectory: true) }
     static func bottle(_ name: String) -> URL {
@@ -219,6 +240,46 @@ enum EngineManager {
             throw DecantError.launch("command timed out: \(URL(fileURLWithPath: launch).lastPathComponent)")
         }
         return RunResult(code: p.terminationStatus, out: try outputTail(outURL), err: try outputTail(errURL))
+    }
+
+    // start a long-lived process and keep watching it. the pid is the evidence
+    // that a launch request went out; onExit is how a shell that dies in its
+    // first seconds reaches the caller instead of waiting out a phase timeout.
+    // the handler runs once, off the main queue, with the stderr tail.
+    @discardableResult
+    static func spawn(_ launch: String, _ args: [String], extraEnv: [String: String] = [:],
+                      onExit: ((Int32, String) -> Void)? = nil) throws -> Int32 {
+        let p = Process()
+        p.executableURL = URL(fileURLWithPath: launch)
+        p.arguments = args
+        var env = ProcessInfo.processInfo.environment
+        for (k, v) in extraEnv { env[k] = v }
+        p.environment = env
+        let fm = FileManager.default
+        let directory = fm.temporaryDirectory.appendingPathComponent("decant-spawn-\(UUID().uuidString)")
+        try fm.createDirectory(at: directory, withIntermediateDirectories: false,
+                               attributes: [.posixPermissions: 0o700])
+        let errURL = directory.appendingPathComponent("stderr")
+        fm.createFile(atPath: errURL.path, contents: nil)
+        let err = try FileHandle(forWritingTo: errURL)
+        // the game outlives this process, so its stdout goes nowhere.
+        p.standardOutput = FileHandle.nullDevice
+        p.standardError = err
+        p.standardInput = FileHandle.nullDevice
+        p.terminationHandler = { finished in
+            try? err.close()
+            let tail = (try? outputTail(errURL)) ?? ""
+            try? fm.removeItem(at: directory)
+            onExit?(finished.terminationStatus, tail)
+        }
+        do {
+            try p.run()
+        } catch {
+            try? err.close()
+            try? fm.removeItem(at: directory)
+            throw error
+        }
+        return p.processIdentifier
     }
 
     private static func outputTail(_ url: URL) throws -> String {

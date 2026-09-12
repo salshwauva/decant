@@ -11,8 +11,16 @@ engine/**/*.dll
 engine/**/*.so
 engine/**/*.exe
 
-# agent files
-CLAUDE.md
-AGENTS.md
-GEMINI.md
+# AI assistant and agent files, kept local and out of the repo
+/robots.md
+/CLAUDE.md
+/CLAUDE.local.md
+/AGENTS.md
+/GEMINI.md
 .claude/
+.cursor/
+.cursorrules
+.windsurfrules
+.aider*
+.continue/
+.github/copilot-instructions.md

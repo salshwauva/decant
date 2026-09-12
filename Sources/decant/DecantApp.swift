@@ -60,9 +60,30 @@ private func handleCLI() {
 
     if args.contains("--steam") {
         runOrDie {
+            let id = UUID().uuidString
             let (engine, bottle) = try EngineManager.requireSteam()
-            try SteamManager.launchClient(bottle, engine: engine)
-            print("decant: steam open request sent (sign in there)")
+            try SteamManager.launchClient(bottle, engine: engine, launchID: id)
+            print("decant: steam open request sent (sign in there), launch id \(id)")
+        }
+    }
+
+    // print the newest launch report. the file on disk is already redacted.
+    if args.contains("--export-launch") {
+        guard let url = LaunchDiagnostic.latestReport() else {
+            print("decant: no launch reports yet in \(DecantLog.directory.path)")
+            exit(0)
+        }
+        print(url.path)
+        print((try? String(contentsOf: url, encoding: .utf8)) ?? "")
+        exit(0)
+    }
+
+    // swap back to the engine version the last install replaced.
+    if args.contains("--rollback-engine") {
+        runOrDie {
+            try EnginePaths.store.rollback()
+            print("decant: engine rolled back")
+            EngineManager.doctor()
         }
     }
 
@@ -102,9 +123,11 @@ private func handleCLI() {
     if let i = args.firstIndex(of: "--play"), i + 1 < args.count {
         let appid = args[i + 1]
         runOrDie {
+            let id = UUID().uuidString
             let (engine, bottle) = try EngineManager.requireReady()
-            try SteamManager.launchGame(appID: appid, bottle: bottle, engine: engine)
-            print("decant: launch request sent for app \(appid)")
+            try SteamManager.launchGame(appID: appid, bottle: bottle, engine: engine,
+                                        launchID: id)
+            print("decant: launch request sent for app \(appid), launch id \(id)")
         }
     }
 }

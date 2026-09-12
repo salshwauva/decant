@@ -6,10 +6,14 @@ import SwiftUI
 // launch the game, or back out.
 struct GameDetailView: View {
     let game: Game
-    let isLaunching: Bool
+    // read-only view of the launch. the sheet never drives a process.
+    let launch: LaunchSnapshot?
     let onPlay: () -> Void
     let onClose: () -> Void
     var onUninstall: () -> Void = {}
+    var onRecover: (RecoveryAction) -> Void = { _ in }
+
+    private var isLaunching: Bool { launch?.isInFlight ?? false }
 
     private var coverURL: URL? {
         URL(string: "https://cdn.cloudflare.steamstatic.com/steam/apps/\(game.appID)/header.jpg")
@@ -24,6 +28,9 @@ struct GameDetailView: View {
             VStack(spacing: 12) {
                 hero
                 label
+                if let launch, launch.phase != .idle {
+                    launchLine(launch)
+                }
                 HStack(spacing: 12) {
                     PixelButton(label: isLaunching ? "pouring…" : "▶  PLAY",
                                 top: Palette.wineHi, bottom: Palette.wine, text: Palette.cream, fill: true,
@@ -81,6 +88,43 @@ struct GameDetailView: View {
             .clipped()
             .bevel(raised: false, width: 3)
         }
+    }
+
+    // phase, how long it has been there, one sentence, and what to do next.
+    @ViewBuilder private func launchLine(_ launch: LaunchSnapshot) -> some View {
+        VStack(spacing: 6) {
+            Text("\(launch.phase.label) · \(launch.elapsedLabel)")
+                .font(.system(size: 11, weight: .medium, design: .monospaced))
+                .foregroundColor(launch.phase.isFailed ? Palette.cream : Palette.inkDim)
+            Text(launch.explanation)
+                .font(.system(size: 10, design: .monospaced))
+                .foregroundColor(launch.phase.isFailed ? Palette.cream.opacity(0.85) : Palette.inkMut)
+                .multilineTextAlignment(.center)
+                .fixedSize(horizontal: false, vertical: true)
+            if !launch.recovery.isEmpty {
+                HStack(spacing: 14) {
+                    ForEach(launch.recovery) { action in
+                        Button { onRecover(action) } label: {
+                            Text(action.label)
+                                .font(.system(size: 10, weight: .medium, design: .monospaced))
+                                .foregroundColor(launch.phase.isFailed ? Palette.cream : Palette.inkMut)
+                                .underline()
+                        }
+                        .buttonStyle(.plain)
+                    }
+                }
+            }
+        }
+        .padding(.horizontal, 12).padding(.vertical, 8)
+        .frame(maxWidth: .infinity)
+        .background(
+            LinearGradient(
+                colors: launch.phase.isFailed
+                    ? [Palette.wineHi, Palette.wine]
+                    : [Palette.cream, Palette.label],
+                startPoint: .top, endPoint: .bottom)
+        )
+        .bevel(width: 2)
     }
 
     private var label: some View {

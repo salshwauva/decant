@@ -120,20 +120,45 @@ final class DecantTests: XCTestCase {
         XCTAssertLessThan(Date().timeIntervalSince(start), 3)
     }
 
+    // launchGame spawns, so the shell's failure arrives through onExit rather
+    // than as a throw. the exit code and the stderr both have to survive.
     func testShellFailureReachesCaller() throws {
         try write("engine/decant-launch.sh", "echo missing-steam >&2\nexit 9\n")
-        XCTAssertThrowsError(try SteamManager.launchGame(appID: "100", bottle: root, engine: Engine(wine: "/unused/wine"))) {
-            XCTAssertTrue(String(describing: $0).contains("missing-steam"))
+        let exited = expectation(description: "wrapper exit")
+        var seenCode: Int32?
+        var seenErr = ""
+        try SteamManager.launchGame(appID: "100", bottle: root, engine: Engine(wine: "/unused/wine"),
+                                    launchID: "test") { code, err in
+            seenCode = code
+            seenErr = err
+            exited.fulfill()
         }
+        wait(for: [exited], timeout: 10)
+        XCTAssertEqual(seenCode, 9)
+        XCTAssertTrue(seenErr.contains("missing-steam"), "stderr was \(seenErr)")
+    }
+
+    // an app id the script must never see. the guard runs before the spawn.
+    func testInvalidAppIDNeverSpawns() throws {
+        try write("engine/decant-launch.sh", "touch \"$DECANT_HOME/spawned\"\n")
+        XCTAssertThrowsError(try SteamManager.launchGame(appID: "1; rm -rf /", bottle: root,
+                                                         engine: Engine(wine: "/unused/wine"),
+                                                         launchID: "test"))
+        XCTAssertFalse(FileManager.default.fileExists(atPath: root.appendingPathComponent("spawned").path))
     }
 
     func testLaunchUsesSelectedBottleAndEngine() throws {
-        try write("engine/decant-launch.sh", "printf '%s\\n' \"$WINEPREFIX\" \"$WINE_BIN\" \"$WINE_APP\" \"$@\" > \"$DECANT_HOME/request\"\n")
+        try write("engine/decant-launch.sh", "printf '%s\\n' \"$WINEPREFIX\" \"$WINE_BIN\" \"$WINE_APP\" \"$DECANT_LAUNCH_ID\" \"$@\" > \"$DECANT_HOME/request\"\n")
         let wine = root.appendingPathComponent("engine/Wine Stable.app/Contents/Resources/wine/bin/wine").path
         let bottle = root.appendingPathComponent("other bottle")
-        try SteamManager.launchGame(appID: "100", bottle: bottle, engine: Engine(wine: wine))
+        let exited = expectation(description: "wrapper exit")
+        try SteamManager.launchGame(appID: "100", bottle: bottle, engine: Engine(wine: wine),
+                                    launchID: "abc123") { _, _ in exited.fulfill() }
+        wait(for: [exited], timeout: 10)
         let fields = try String(contentsOf: root.appendingPathComponent("request")).split(separator: "\n").map(String.init)
-        XCTAssertEqual(fields, [bottle.path, wine, root.appendingPathComponent("engine/Wine Stable.app").path, "play", "100"])
+        XCTAssertEqual(fields, [bottle.path, wine,
+                                root.appendingPathComponent("engine/Wine Stable.app").path,
+                                "abc123", "play", "100"])
     }
 
     func testPartialEngineIsNotReady() throws {

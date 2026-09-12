@@ -12,8 +12,18 @@
 
 # shellcheck source=lib/common.sh
 source "$(dirname "$0")/lib/common.sh"
+# shellcheck source=lib/engine-store.sh
+source "$(dirname "$0")/lib/engine-store.sh"
 require_macos_arm64
 require_homebrew
+require_cmd python3
+
+# one engine version per id. bump the id when a pin in PINS.md moves.
+: "${ENGINE_ID:=wine-11.0-dxmt-v0.74}"
+: "${ENGINE_WINE_TAG:=wine-11.0}"
+: "${ENGINE_WINE_COMMIT:=${WINE_BUILD_BRANCH:-wine-11.0}}"
+: "${ENGINE_DXMT_TAG:=v0.74}"
+: "${ENGINE_DXMT_COMMIT:=${DXMT_FORK_SHA:-unset}}"
 
 WINE_CASK="wine-stable"
 WINETRICKS_FORMULA="winetricks"
@@ -54,18 +64,46 @@ if [[ ! -d "$BREW_WINE_APP" ]]; then
     die "Wine Stable.app not found after brew install (looked in /Applications and ~/Applications)"
 fi
 
-if [[ "$WINE_APP" != "$BREW_WINE_APP" ]]; then
-    if [[ ! -x "$WINE_BIN" ]]; then
-        log_info "Copying Wine into decant home: $WINE_APP"
-        mkdir -p "$(dirname "$WINE_APP")"
-        # -R recursive, -X drop xattrs including com.apple.provenance
-        rm -rf "$WINE_APP"
-        cp -RX "$BREW_WINE_APP" "$WINE_APP"
-        log_ok "Writable Wine copy at $WINE_APP"
-    else
-        log_ok "Writable Wine already at $WINE_APP"
+# The engine store keeps each version in its own directory and points
+# engines/current at the active one. The previous version stays on disk, so a
+# bad install rolls back. The five steps below match engine_store_activate and
+# Sources/decant/EngineStore.swift.
+VERSION_DIR="$ENGINE_STORE_ROOT/versions/$ENGINE_ID"
+STAGING="$ENGINE_STORE_ROOT/versions/$ENGINE_ID.partial"
+TARGET_APP="$VERSION_DIR/Wine Stable.app"
+
+if [[ -x "$TARGET_APP/Contents/Resources/wine/bin/wine" ]]; then
+    log_ok "Engine version $ENGINE_ID already installed"
+else
+    log_info "Installing engine version $ENGINE_ID"
+    # step 1: copy into the partial directory. -R recursive, -X drop xattrs
+    # including com.apple.provenance, which makes the copy read-only on Tahoe.
+    rm -rf "$STAGING"
+    mkdir -p "$STAGING"
+    cp -RX "$BREW_WINE_APP" "$STAGING/Wine Stable.app"
+
+    # wine-stable is unsigned. Without this macOS kills wine with exit 137.
+    if xattr -l "$STAGING/Wine Stable.app" 2>/dev/null | grep -q com.apple.quarantine; then
+        log_info "Removing com.apple.quarantine from the staged copy"
+        xattr -dr com.apple.quarantine "$STAGING/Wine Stable.app"
     fi
+
+    # step 2: hash every artifact into the manifest.
+    log_info "Hashing artifacts into manifest.json"
+    engine_store_write_manifest "$STAGING" "$ENGINE_ID" \
+        "$ENGINE_WINE_TAG" "$ENGINE_WINE_COMMIT" "$ENGINE_DXMT_TAG" "$ENGINE_DXMT_COMMIT"
+
+    # steps 3, 4 and 5: validate the staged copy, rename it into place, then
+    # switch current. A staged copy that does not validate is removed and
+    # current keeps the version it already had.
+    engine_store_promote "$ENGINE_ID" || die "Engine version $ENGINE_ID did not install"
 fi
+
+# point this shell at the version that is now active.
+WINE_APP="$ENGINE_STORE_ROOT/current/Wine Stable.app"
+WINE_BIN="$WINE_APP/Contents/Resources/wine/bin/wine"
+WINESERVER_BIN="$WINE_APP/Contents/Resources/wine/bin/wineserver"
+export WINE_APP WINE_BIN WINESERVER_BIN
 
 if [[ ! -d "$WINE_APP" ]]; then
     die "Wine Stable.app not found at $WINE_APP"

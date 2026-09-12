@@ -57,7 +57,58 @@ After engine setup, run the smoke checks:
 ./scripts/smoke.sh
 ```
 
-The executable also supports `--self-test`, `--doctor`, and `--log`. Logs live at `~/Library/Application Support/decant/logs/decant.log`.
+The executable also supports `--self-test`, `--doctor`, `--log`, `--gc`, `--export-launch`, and `--rollback-engine`. Logs live at `~/Library/Application Support/decant/logs/decant.log`.
+
+## Engine updates
+
+Each engine version lives in its own directory. `current` names the active version. `previous` names the version it replaced.
+
+```
+engines/
+  versions/<id>/                one engine version
+  versions/<id>/manifest.json   pins plus a sha256 per artifact
+  versions/<id>.partial/        in-flight work
+  current   -> versions/<id>
+  previous  -> versions/<id>
+```
+
+An install runs five steps. `Sources/decant/EngineStore.swift` and `engine/scripts/lib/engine-store.sh` follow the same five:
+
+1. Copy the new engine into `versions/<id>.partial`.
+2. Hash every artifact the manifest lists.
+3. Validate the staged directory: manifest ID, artifacts present, hashes match.
+4. Rename `versions/<id>.partial` onto `versions/<id>`.
+5. Write `current.new`, rename it onto `current`, then point `previous` at the old ID.
+
+A failure at any step leaves `current` on the old version and leaves the bottle untouched. `decant --rollback-engine` swaps back to `previous`.
+
+The self-test installs a fake engine, fingerprints a fake prefix, then fails one install per fault case. It checks that the old engine is still active and that the prefix still hashes the same:
+
+```sh
+swift build -c release && .build/release/decant --self-test
+```
+
+That run prints one `FAULT <name> recovered` line per case, then the count as `N=`. The smoke script fails when the count and the number of `FAULT` lines disagree.
+
+## Launch lifecycle
+
+Pressing Play runs a state machine. [The lifecycle note](docs/launch-lifecycle.md) records the states, the evidence each transition needs, the timeouts, and what a detected process does and does not prove.
+
+Every launch carries an ID and a stage log. A finished or failed launch writes a redacted report:
+
+```sh
+decant --export-launch
+```
+
+Two things can end a launch early. A phase can run out of time. The launch script can also exit non-zero, and Decant reports that exit instead of waiting for the timeout.
+
+The state machine is a plain Swift type, so the self-test drives it with a fake clock, a fake probe, and a fake spawner. No Wine and no bottle are involved:
+
+```sh
+.build/release/decant --self-test 2>/dev/null | grep -c '^ok   launch\|^ok   redact'
+```
+
+The smoke script fails when any named lifecycle case goes missing.
 
 ## Source map
 

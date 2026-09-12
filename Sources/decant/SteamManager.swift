@@ -89,16 +89,35 @@ enum SteamManager {
 
     private static func request(_ args: [String], bottle: URL, engine: Engine) throws {
         let script = try requireLaunchScript()
+        let result = try EngineManager.run("/bin/bash", [script.path] + args,
+                                           extraEnv: launchEnv(bottle: bottle, engine: engine))
+        if !result.err.isEmpty { DecantLog.line(result.err) }
+        guard result.code == 0 else {
+            throw DecantError.launch(result.err.isEmpty ? "launcher exited \(result.code)" : result.err)
+        }
+    }
+
+    // every call into decant-launch.sh names the bottle and the engine, so a
+    // non-default pair never falls back to the script's own defaults.
+    private static func launchEnv(bottle: URL, engine: Engine) -> [String: String] {
         var env = EngineManager.bottleEnv(bottle)
         env["WINE_BIN"] = engine.wine
         let bin = URL(fileURLWithPath: engine.wine).deletingLastPathComponent()
         env["WINESERVER_BIN"] = bin.appendingPathComponent("wineserver").path
         env["WINE_APP"] = bin.deletingLastPathComponent().deletingLastPathComponent()
             .deletingLastPathComponent().deletingLastPathComponent().path
-        let result = try EngineManager.run("/bin/bash", [script.path] + args, extraEnv: env)
-        if !result.err.isEmpty { DecantLog.line(result.err) }
-        guard result.code == 0 else {
-            throw DecantError.launch(result.err.isEmpty ? "launcher exited \(result.code)" : result.err)
+        return env
+    }
+
+    private static func spawnRequest(_ args: [String], bottle: URL, engine: Engine,
+                                    launchID: String,
+                                    onExit: ((Int32, String) -> Void)?) throws -> Int32 {
+        let script = try requireLaunchScript()
+        var env = launchEnv(bottle: bottle, engine: engine)
+        env["DECANT_LAUNCH_ID"] = launchID
+        return try EngineManager.spawn("/bin/bash", [script.path] + args, extraEnv: env) { code, err in
+            if !err.isEmpty { DecantLog.line(err) }
+            onExit?(code, err)
         }
     }
 
@@ -112,24 +131,37 @@ enum SteamManager {
         return url
     }
 
-    // result message for the ui (e.g. dump trim note). throws on hard failure.
-    @discardableResult
-    static func launchClient(_ bottle: URL, engine: Engine) throws -> String? {
-        let note = try clearDumpsIfBig(bottle)
-        try request(["steam"], bottle: bottle, engine: engine)
-        DecantLog.line("steam open request sent")
-        return note
+    // the pid of the wrapper decant started, plus a message for the ui
+    // (a dump trim note, say). the pid is the evidence that the request went
+    // out; it says nothing about whether wine got anywhere. onExit fires when
+    // the wrapper exits, which is how an early shell failure reaches the
+    // controller before the phase timeout does.
+    struct LaunchSpawn {
+        let pid: Int32
+        let note: String?
     }
 
     @discardableResult
-    static func launchGame(appID: String, bottle: URL, engine: Engine) throws -> String? {
+    static func launchClient(_ bottle: URL, engine: Engine, launchID: String,
+                             onExit: ((Int32, String) -> Void)? = nil) throws -> LaunchSpawn {
+        let note = try clearDumpsIfBig(bottle)
+        let pid = try spawnRequest(["steam"], bottle: bottle, engine: engine,
+                                   launchID: launchID, onExit: onExit)
+        DecantLog.line("steam open request sent launch_id=\(launchID) pid=\(pid)")
+        return LaunchSpawn(pid: pid, note: note)
+    }
+
+    @discardableResult
+    static func launchGame(appID: String, bottle: URL, engine: Engine, launchID: String,
+                           onExit: ((Int32, String) -> Void)? = nil) throws -> LaunchSpawn {
         guard validAppID(appID) else {
             throw DecantError.launch("invalid steam app id: \(appID)")
         }
         let note = try clearDumpsIfBig(bottle)
-        try request(["play", appID], bottle: bottle, engine: engine)
-        DecantLog.line("game launch request sent appid=\(appID)")
-        return [note, "launch request sent to steam; game startup is not yet verified"].compactMap { $0 }.joined(separator: "; ")
+        let pid = try spawnRequest(["play", appID], bottle: bottle, engine: engine,
+                                   launchID: launchID, onExit: onExit)
+        DecantLog.line("game launch request sent appid=\(appID) launch_id=\(launchID) pid=\(pid)")
+        return LaunchSpawn(pid: pid, note: note)
     }
 
     static func uninstallGame(appID: String, bottle: URL, engine: Engine) throws {
