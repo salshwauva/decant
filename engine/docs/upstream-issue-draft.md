@@ -1,5 +1,20 @@
 # Draft: GitHub issue for 3Shain/dxmt
 
+> **Provenance: this draft is not Sophia's work.**
+>
+> It arrived with the engine recipe imported from
+> [notpop/steam-on-m1-wine](https://github.com/notpop/steam-on-m1-wine) at base
+> commit `540037e`. See `engine/NOTICE`.
+>
+> The reproduction below belongs to its original author. It names a MacBook Pro
+> M1 with 16 GB, a title that is not in this library, and evidence files
+> gathered on that machine. Decant runs on an M4 with 24 GB.
+>
+> Do not submit this upstream under another name. A report from this project
+> needs its own reproduction on this hardware, its own evidence, and its own
+> environment table. Keep this file as the reference for what the problem is
+> and what has already been reported.
+
 Target: <https://github.com/3Shain/dxmt/issues/new>
 
 ---

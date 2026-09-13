@@ -48,9 +48,12 @@ DXMT
     License: MIT License
     Copyright: (c) 2023 Feifan He
     Source:  https://github.com/3Shain/dxmt
-    Notes:   scripts/04-install-dxmt.sh fetches a release tarball.
-             scripts/07-build-dxmt-fork.sh builds notpop/dxmt branch
-             debug/present-path-tracing (mutable branch; pin when possible).
+    Notes:   scripts/04-install-dxmt.sh fetches a release tarball and
+             checks its sha256. scripts/07-build-dxmt-fork.sh builds
+             notpop/dxmt at the commit DXMT_FORK_SHA names, and refuses
+             anything that is not a full 40 character hash. The branch
+             debug/present-path-tracing is where that commit came from.
+             engine/PINS.md records the commit.
 
 GStreamer runtime
     License: LGPL-2.1
