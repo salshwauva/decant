@@ -13,14 +13,17 @@ protocol ProcessProbe {
     func gameDetected(appID: String, prefix: URL) -> Bool
 }
 
-// onExit carries the script's exit status back after the process ends, so
-// a shell that fails later still reaches the controller.
+// onExit carries the pid and the script's exit status back after the process
+// ends, so a shell that fails later still reaches the controller, and the
+// controller knows which launcher the status belongs to.
 protocol LaunchSpawner {
-    func startSteam(launchID: String, onExit: @escaping (RunResult) -> Void) throws -> Int32
+    func startSteam(launchID: String,
+                    onExit: @escaping (Int32, RunResult) -> Void) throws -> Int32
     func startGame(appID: String, launchID: String,
-                   onExit: @escaping (RunResult) -> Void) throws -> Int32
+                   onExit: @escaping (Int32, RunResult) -> Void) throws -> Int32
     // stop a launcher this spawner started, when a launch gives up on it.
-    func terminate(pid: Int32)
+    // returns nil when the signal went out, otherwise the errno.
+    func terminate(pid: Int32) -> Int32?
 }
 
 struct SystemClock: LaunchClock {
@@ -115,18 +118,19 @@ struct SteamLaunchSpawner: LaunchSpawner {
     let bottle: URL
     let engine: Engine
 
-    func startSteam(launchID: String, onExit: @escaping (RunResult) -> Void) throws -> Int32 {
+    func startSteam(launchID: String,
+                    onExit: @escaping (Int32, RunResult) -> Void) throws -> Int32 {
         try SteamManager.launchClient(bottle, engine: engine, launchID: launchID,
                                       onExit: onExit).pid
     }
 
     func startGame(appID: String, launchID: String,
-                   onExit: @escaping (RunResult) -> Void) throws -> Int32 {
+                   onExit: @escaping (Int32, RunResult) -> Void) throws -> Int32 {
         try SteamManager.launchGame(appID: appID, bottle: bottle, engine: engine,
                                     launchID: launchID, onExit: onExit).pid
     }
 
-    func terminate(pid: Int32) {
+    func terminate(pid: Int32) -> Int32? {
         EngineManager.terminateSpawn(pid: pid)
     }
 }

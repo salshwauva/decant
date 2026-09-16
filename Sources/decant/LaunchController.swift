@@ -62,9 +62,12 @@ final class LaunchController: ObservableObject {
     private var prefix: URL?
     private var lastRejection: LaunchFailure?
     private var timer: Timer?
-    // the launcher this session started, so a launch that gives up can stop
-    // it. zero when nothing is running.
-    private var launcherPID: Int32 = 0
+    // every launcher this session started that has not reported an exit. a
+    // launch starts the steam wrapper and then the game wrapper, and the
+    // first can still be running when the second starts, so this holds both.
+    // a pid leaves this list the moment its exit arrives, because the kernel
+    // is free to give that number to an unrelated process afterwards.
+    private var liveLaunchers: [Int32] = []
 
     // how often production polls the probe and the timeouts.
     private let pollSeconds: TimeInterval = 2
@@ -152,7 +155,7 @@ final class LaunchController: ObservableObject {
     func reset() {
         session = nil
         lastRejection = nil
-        launcherPID = 0
+        liveLaunchers = []
         publish()
     }
 
@@ -203,14 +206,18 @@ final class LaunchController: ObservableObject {
     // spawn path used to lose. every exit is logged with its launch id. a
     // callback from an earlier launch is stale and changes nothing, and an
     // exit that lands after the launch already ended only gets a log line.
-    func deliverExit(launchID: String, result: RunResult) {
+    func deliverExit(launchID: String, pid: Int32, result: RunResult) {
         let apply = { [weak self] in
             guard let self else { return }
             guard let live = self.session, live.id == launchID else {
-                DecantLog.line("launch_id=\(launchID) stale exit \(result.code) ignored")
+                self.forget(pid: pid)
+                DecantLog.line("launch_id=\(launchID) stale exit \(result.code) from pid=\(pid) ignored")
                 return
             }
-            DecantLog.line("launch_id=\(launchID) launch script exited \(result.code)")
+            // this launcher is gone, so drop its pid before anything else can
+            // decide to signal it.
+            self.forget(pid: pid)
+            DecantLog.line("launch_id=\(launchID) launch script pid=\(pid) exited \(result.code)")
             guard result.code != 0 else { return }
             guard live.phase.isInFlight else {
                 DecantLog.line("launch_id=\(launchID) exit \(result.code) arrived after the "
@@ -233,10 +240,10 @@ final class LaunchController: ObservableObject {
         guard let live = session else { return }
         do {
             let id = live.id
-            let pid = try spawner.startSteam(launchID: id) { [weak self] result in
-                self?.deliverExit(launchID: id, result: result)
+            let pid = try spawner.startSteam(launchID: id) { [weak self] pid, result in
+                self?.deliverExit(launchID: id, pid: pid, result: result)
             }
-            launcherPID = pid
+            liveLaunchers.append(pid)
             DecantLog.line("launch_id=\(live.id) steam wrapper pid=\(pid)")
         } catch {
             spawnFailed(error)
@@ -247,10 +254,12 @@ final class LaunchController: ObservableObject {
         guard let live = session else { return }
         do {
             let id = live.id
-            let pid = try spawner.startGame(appID: live.appID, launchID: id) { [weak self] result in
-                self?.deliverExit(launchID: id, result: result)
+            // the steam wrapper can still be running, so this pid joins it
+            // instead of replacing it.
+            let pid = try spawner.startGame(appID: live.appID, launchID: id) { [weak self] pid, result in
+                self?.deliverExit(launchID: id, pid: pid, result: result)
             }
-            launcherPID = pid
+            liveLaunchers.append(pid)
             advance(.requestSpawned(pid: pid), at: clock.now(), exitCode: nil)
             DecantLog.line("launch_id=\(live.id) phase=request_sent pid=\(pid)")
         } catch {
@@ -311,10 +320,23 @@ final class LaunchController: ObservableObject {
         writeDiagnostic()
     }
 
+    // stop every launcher this session still has running. a pid that already
+    // reported its exit is not in the list, so it never gets signalled.
     private func stopLauncher() {
-        guard launcherPID > 0 else { return }
-        spawner.terminate(pid: launcherPID)
-        launcherPID = 0
+        let pids = liveLaunchers
+        liveLaunchers = []
+        for pid in pids {
+            guard let code = spawner.terminate(pid: pid) else { continue }
+            // ESRCH only means the launcher exited between the list and the
+            // signal. anything else is worth the line. the pid is dropped
+            // either way, and nothing is retried.
+            let reason = String(cString: strerror(code))
+            DecantLog.line("could not stop launcher pid=\(pid): \(reason)")
+        }
+    }
+
+    private func forget(pid: Int32) {
+        liveLaunchers.removeAll { $0 == pid }
     }
 
     private func writeDiagnostic() {

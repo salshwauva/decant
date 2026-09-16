@@ -244,11 +244,12 @@ enum EngineManager {
 
     // start a launcher in the background and return its pid. the shell can
     // still fail after it starts, so the caller gets that exit status later
-    // through onExit. capture matches run(): bounded temporary files, tail
+    // through onExit, with the pid it belongs to. capture matches run():
+    // bounded temporary files, tail
     // only, and the text goes to the log through DecantLog.line.
     @discardableResult
     static func spawn(_ launch: String, _ args: [String], extraEnv: [String: String] = [:],
-                      onExit: ((RunResult) -> Void)? = nil) throws -> Int32 {
+                      onExit: ((Int32, RunResult) -> Void)? = nil) throws -> Int32 {
         let p = Process()
         p.executableURL = URL(fileURLWithPath: launch)
         p.arguments = args
@@ -294,7 +295,7 @@ enum EngineManager {
                 DecantLog.line(text.trimmingCharacters(in: .whitespacesAndNewlines))
             }
             DecantLog.line("spawn exit \(result.code): \(URL(fileURLWithPath: launch).lastPathComponent)")
-            onExit?(result)
+            onExit?(finished.processIdentifier, result)
         }
         DecantLog.line("spawn: \(launch) \(args.joined(separator: " "))")
         try p.run()
@@ -305,11 +306,17 @@ enum EngineManager {
     // stop a launcher this process started. it signals the launch script
     // only. wine and steam descendants keep running on purpose, because one
     // of them can be the game the user is playing.
-    static func terminateSpawn(pid: Int32) {
-        guard pid > 0 else { return }
+    //
+    // returns nil when the signal went out, otherwise the errno. ESRCH means
+    // the launcher had already exited. the caller decides what to say.
+    @discardableResult
+    static func terminateSpawn(pid: Int32) -> Int32? {
+        guard pid > 0 else { return nil }
         if kill(pid, SIGTERM) == 0 {
             DecantLog.line("asked launcher pid=\(pid) to stop")
+            return nil
         }
+        return errno
     }
 
     private static func outputTail(_ url: URL) throws -> String {

@@ -320,14 +320,15 @@ enum SelfTest {
         late.requestPlay(appID: "2432860", engineVersion: "self-test", prefix: prefix)
         let liveID = late.snapshot?.id ?? "none"
         lateClock.advance(3)
-        lateSpawner.gameExit?(RunResult(code: 3, out: "", err: "steam is not installed"))
+        lateSpawner.reportGameExit(3, err: "steam is not installed")
         record("launch shell failure reaches the controller",
                late.phase == .failed(.spawn(3)), "phase is \(late.phase.label)")
 
-        // a failed launch stops the launcher it started, so the process ends
-        // and its output files stop growing.
-        record("launch failure stops the launcher",
-               lateSpawner.terminated == [4343], "terminated \(lateSpawner.terminated)")
+        // this failure came from the launcher's own exit, so there is nothing
+        // left to signal. a stop here would reach a pid the kernel may have
+        // handed to another process.
+        record("an exited launcher is not signalled",
+               lateSpawner.terminated.isEmpty, "terminated \(lateSpawner.terminated)")
 
         // 7c. the same controller retries, so the first launch is over. its
         // exit callback arrives late and must change nothing.
@@ -338,9 +339,65 @@ enum SelfTest {
         record("retry starts a new launch",
                secondID != liveID && secondPhase == .requestSent,
                "id \(secondID) phase \(secondPhase.label)")
-        firstExit?(RunResult(code: 9, out: "", err: "old launch"))
+        firstExit?(FakeLaunchSpawner.gamePID, RunResult(code: 9, out: "", err: "old launch"))
         record("launch ignores a stale exit", late.phase == secondPhase,
                "phase is \(late.phase.label)")
+
+        // 7f. a launcher that already reported its exit is never signalled.
+        // the kernel can hand that pid to something else, so a later timeout
+        // must not reach for it.
+        let goneClock = FakeLaunchClock(Date(timeIntervalSince1970: 0))
+        let goneProbe = FakeProcessProbe()
+        let goneSpawner = FakeLaunchSpawner()
+        let gone = LaunchController(clock: goneClock, probe: goneProbe, spawner: goneSpawner)
+        gone.requestPlay(appID: "2432860", engineVersion: "self-test", prefix: prefix)
+        goneSpawner.reportSteamExit(0)
+        goneClock.advance(LaunchTimeout.preparing + 1)
+        gone.tick()
+        record("launch timeout skips a launcher that already exited",
+               gone.phase == .failed(.timeout(from: .preparing))
+                 && goneSpawner.terminated.isEmpty,
+               "phase \(gone.phase.label) terminated \(goneSpawner.terminated)")
+
+        // 7g. the steam wrapper can still be running when the game request
+        // goes out, so a timeout stops both launchers, not just the last one.
+        let bothClock = FakeLaunchClock(Date(timeIntervalSince1970: 0))
+        let bothProbe = FakeProcessProbe()
+        let bothSpawner = FakeLaunchSpawner()
+        let both = LaunchController(clock: bothClock, probe: bothProbe, spawner: bothSpawner)
+        both.requestPlay(appID: "2432860", engineVersion: "self-test", prefix: prefix)
+        bothProbe.steam = true
+        bothClock.advance(5)
+        both.tick()
+        record("launch starts the game while the steam wrapper runs",
+               both.phase == .requestSent && bothSpawner.steamStarts == 1
+                 && bothSpawner.gameStarts == 1,
+               "phase \(both.phase.label)")
+        bothClock.advance(LaunchTimeout.requestSent + 1)
+        both.tick()
+        record("launch timeout stops every launcher still running",
+               bothSpawner.terminated == [FakeLaunchSpawner.steamPID, FakeLaunchSpawner.gamePID],
+               "terminated \(bothSpawner.terminated)")
+
+        // 7h. a signal that fails still drops the pid, so nothing is
+        // signalled twice and nothing is retried.
+        let failClock = FakeLaunchClock(Date(timeIntervalSince1970: 0))
+        let failProbe = FakeProcessProbe()
+        failProbe.steam = true
+        let failSpawner = FakeLaunchSpawner()
+        failSpawner.terminateErrno = ESRCH
+        let failing = LaunchController(clock: failClock, probe: failProbe, spawner: failSpawner)
+        failing.requestPlay(appID: "2432860", engineVersion: "self-test", prefix: prefix)
+        failClock.advance(LaunchTimeout.requestSent + 1)
+        failing.tick()
+        let afterFirstStop = failSpawner.terminated
+        failing.deliverExit(launchID: failing.snapshot?.id ?? "none",
+                            pid: FakeLaunchSpawner.gamePID,
+                            result: RunResult(code: 1, out: "", err: ""))
+        record("a failed stop drops the pid anyway",
+               afterFirstStop == [FakeLaunchSpawner.gamePID]
+                 && failSpawner.terminated == afterFirstStop,
+               "terminated \(failSpawner.terminated)")
 
         // 7e. play and retry pass the same engine gate. a not-ready engine
         // starts nothing, either way.
@@ -443,24 +500,39 @@ final class FakeProcessProbe: ProcessProbe {
 // the fake keeps the exit callbacks so a test can fire one by hand, the way
 // a real launch script reports its status after it ends.
 final class FakeLaunchSpawner: LaunchSpawner {
+    static let steamPID: Int32 = 4242
+    static let gamePID: Int32 = 4343
+
     private(set) var steamStarts = 0
     private(set) var gameStarts = 0
-    private(set) var steamExit: ((RunResult) -> Void)?
-    private(set) var gameExit: ((RunResult) -> Void)?
+    private(set) var steamExit: ((Int32, RunResult) -> Void)?
+    private(set) var gameExit: ((Int32, RunResult) -> Void)?
     private(set) var terminated: [Int32] = []
+    // when set, terminate reports this errno instead of success.
+    var terminateErrno: Int32?
 
-    func startSteam(launchID: String, onExit: @escaping (RunResult) -> Void) throws -> Int32 {
+    func startSteam(launchID: String,
+                    onExit: @escaping (Int32, RunResult) -> Void) throws -> Int32 {
         steamStarts += 1
         steamExit = onExit
-        return 4242
+        return Self.steamPID
     }
 
     func startGame(appID: String, launchID: String,
-                   onExit: @escaping (RunResult) -> Void) throws -> Int32 {
+                   onExit: @escaping (Int32, RunResult) -> Void) throws -> Int32 {
         gameStarts += 1
         gameExit = onExit
-        return 4343
+        return Self.gamePID
     }
 
-    func terminate(pid: Int32) { terminated.append(pid) }
+    func terminate(pid: Int32) -> Int32? {
+        terminated.append(pid)
+        return terminateErrno
+    }
+
+    // fire the exit a real launcher would report.
+    func reportSteamExit(_ code: Int32) { steamExit?(Self.steamPID, RunResult(code: code, out: "", err: "")) }
+    func reportGameExit(_ code: Int32, err: String = "") {
+        gameExit?(Self.gamePID, RunResult(code: code, out: "", err: err))
+    }
 }

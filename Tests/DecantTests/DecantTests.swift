@@ -159,7 +159,8 @@ final class DecantTests: XCTestCase {
         var seen: RunResult?
         let spawn = try SteamManager.launchGame(appID: "100", bottle: root,
                                                 engine: Engine(wine: "/unused/wine"),
-                                                launchID: "id-2") { result in
+                                                launchID: "id-2") { pid, result in
+            XCTAssertGreaterThan(pid, 0)
             seen = result
             done.fulfill()
         }
@@ -183,10 +184,47 @@ final class DecantTests: XCTestCase {
         XCTAssertEqual(controller.phase, .requestSent)
         XCTAssertEqual(spawner.gameStarts, 1)
 
-        spawner.gameExit?(RunResult(code: 9, out: "", err: "missing-steam"))
+        spawner.reportGameExit(9, err: "missing-steam")
         XCTAssertEqual(controller.phase, .failed(.spawn(9)))
         XCTAssertEqual(controller.snapshot?.phase, .failed(.spawn(9)))
-        XCTAssertEqual(spawner.terminated, [4343])
+        // the launcher reported its own exit, so its pid is gone and must
+        // not be signalled afterwards.
+        XCTAssertTrue(spawner.terminated.isEmpty)
+    }
+
+    // a launcher that reported its exit is never signalled later, and a
+    // timeout stops every launcher that is still running.
+    func testTimeoutStopsOnlyLiveLaunchers() throws {
+        let prefix = EnginePaths.bottle("steam11")
+        try FileManager.default.createDirectory(at: prefix, withIntermediateDirectories: true)
+
+        // steam comes up, exits, then the launch times out: nothing to stop.
+        let goneClock = FakeLaunchClock(Date(timeIntervalSince1970: 0))
+        let goneSpawner = FakeLaunchSpawner()
+        let gone = LaunchController(clock: goneClock, probe: FakeProcessProbe(),
+                                    spawner: goneSpawner)
+        gone.requestPlay(appID: "100", engineVersion: "test", prefix: prefix)
+        goneSpawner.reportSteamExit(0)
+        goneClock.advance(LaunchTimeout.preparing + 1)
+        gone.tick()
+        XCTAssertEqual(gone.phase, .failed(.timeout(from: .preparing)))
+        XCTAssertTrue(goneSpawner.terminated.isEmpty)
+
+        // the steam wrapper is still running when the game request goes out,
+        // so the timeout stops both.
+        let bothClock = FakeLaunchClock(Date(timeIntervalSince1970: 0))
+        let bothProbe = FakeProcessProbe()
+        let bothSpawner = FakeLaunchSpawner()
+        let both = LaunchController(clock: bothClock, probe: bothProbe, spawner: bothSpawner)
+        both.requestPlay(appID: "100", engineVersion: "test", prefix: prefix)
+        bothProbe.steam = true
+        bothClock.advance(5)
+        both.tick()
+        XCTAssertEqual(both.phase, .requestSent)
+        bothClock.advance(LaunchTimeout.requestSent + 1)
+        both.tick()
+        XCTAssertEqual(bothSpawner.terminated,
+                       [FakeLaunchSpawner.steamPID, FakeLaunchSpawner.gamePID])
     }
 
     // play and retry pass the same engine gate, so neither starts a launch

@@ -155,7 +155,7 @@ enum SteamManager {
     // arrives later through onExit instead of a throw.
     @discardableResult
     static func launchClient(_ bottle: URL, engine: Engine, launchID: String,
-                             onExit: ((RunResult) -> Void)? = nil) throws -> LaunchSpawn {
+                             onExit: ((Int32, RunResult) -> Void)? = nil) throws -> LaunchSpawn {
         let note = try clearDumpsIfBig(bottle)
         let script = try requireLaunchScript()
         let pid = try EngineManager.spawn(
@@ -168,7 +168,7 @@ enum SteamManager {
 
     @discardableResult
     static func launchGame(appID: String, bottle: URL, engine: Engine, launchID: String,
-                           onExit: ((RunResult) -> Void)? = nil) throws -> LaunchSpawn {
+                           onExit: ((Int32, RunResult) -> Void)? = nil) throws -> LaunchSpawn {
         guard validAppID(appID) else {
             throw DecantError.launch("invalid steam app id: \(appID)")
         }
