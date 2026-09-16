@@ -136,6 +136,99 @@ final class DecantTests: XCTestCase {
         XCTAssertEqual(fields, [bottle.path, wine, root.appendingPathComponent("engine/Wine Stable.app").path, "play", "100"])
     }
 
+    // the merge kept main's checked request and added the lifecycle path.
+    // both build their environment in one place, so both name the bottle,
+    // the engine, and the launch id.
+    func testLaunchEnvironmentIncludesID() {
+        let wine = root.appendingPathComponent("engines/current/Wine Stable.app/Contents/Resources/wine/bin/wine").path
+        let bottle = root.appendingPathComponent("bottles/steam11")
+        let env = SteamManager.launchEnvironment(bottle: bottle, engine: Engine(wine: wine), launchID: "id-1")
+        XCTAssertEqual(env["WINEPREFIX"], bottle.path)
+        XCTAssertEqual(env["WINE_BIN"], wine)
+        XCTAssertEqual(env["WINE_APP"], root.appendingPathComponent("engines/current/Wine Stable.app").path)
+        XCTAssertEqual(env["DECANT_LAUNCH_ID"], "id-1")
+        let plain = SteamManager.launchEnvironment(bottle: bottle, engine: Engine(wine: wine))
+        XCTAssertNil(plain["DECANT_LAUNCH_ID"])
+    }
+
+    // the lifecycle path does not wait for the script, so the exit status
+    // arrives later. it must still reach the caller.
+    func testAsyncShellFailureReachesController() throws {
+        try write("engine/decant-launch.sh", "echo missing-steam >&2\nexit 9\n")
+        let done = expectation(description: "exit")
+        var seen: RunResult?
+        let spawn = try SteamManager.launchGame(appID: "100", bottle: root,
+                                                engine: Engine(wine: "/unused/wine"),
+                                                launchID: "id-2") { result in
+            seen = result
+            done.fulfill()
+        }
+        XCTAssertGreaterThan(spawn.pid, 0)
+        wait(for: [done], timeout: 10)
+        XCTAssertEqual(seen?.code, 9)
+        XCTAssertTrue(seen?.err.contains("missing-steam") == true)
+    }
+
+    // the swift probe uses the same boundary rule as the shell helper.
+    func testProcessProbeRejectsPrefixSuffix() {
+        let bottle = root.appendingPathComponent("bottles/steam11")
+        let exact = "PID TTY WINEPREFIX=\(bottle.path) WINEDEBUG=-all wine steam.exe"
+        let longer = "PID TTY WINEPREFIX=\(bottle.path)-old WINEDEBUG=-all wine steam.exe"
+        XCTAssertTrue(SystemProcessProbe.matchesPrefix(exact, prefix: bottle))
+        XCTAssertFalse(SystemProcessProbe.matchesPrefix(longer, prefix: bottle))
+        let tail = "PID TTY WINEPREFIX=\(bottle.path)"
+        XCTAssertTrue(SystemProcessProbe.matchesPrefix(tail, prefix: bottle))
+    }
+
+    // an id names one set of bytes. a second install under that id with
+    // different contents is refused, and the installed version survives.
+    func testEngineStoreRejectsExistingVersionReplacement() throws {
+        let store = EngineStore(root: root.appendingPathComponent("engines"))
+        let first = root.appendingPathComponent("build-first")
+        let second = root.appendingPathComponent("build-second")
+        try write("build-first/bin/wine", "first\n")
+        try write("build-second/bin/wine", "second\n")
+        func manifest(_ dir: URL) throws -> EngineManifest {
+            EngineManifest(id: "v-1", wineTag: "wine-11.0", wineSourceCommit: "t",
+                           dxmtTag: "v0.74", dxmtCommit: "t", patches: [], build: [:],
+                           artifacts: try EngineStore.artifactHashes(of: dir),
+                           createdAt: Date(timeIntervalSince1970: 0))
+        }
+        try store.install(from: first, manifest: try manifest(first), fault: nil)
+        XCTAssertEqual(try store.activeID(), "v-1")
+        XCTAssertThrowsError(try store.install(from: second, manifest: try manifest(second), fault: nil)) {
+            XCTAssertTrue(String(describing: $0).contains("different contents"))
+        }
+        let kept = try String(contentsOf: store.versionURL(id: "v-1").appendingPathComponent("bin/wine"),
+                              encoding: .utf8)
+        XCTAssertEqual(kept, "first\n")
+        XCTAssertEqual(try store.activeID(), "v-1")
+    }
+
+    // if the previous link cannot be written, current goes back to the
+    // version that was active, so the two links never disagree.
+    func testEngineStoreRestoresLinksAfterPreviousFailure() throws {
+        var store = EngineStore(root: root.appendingPathComponent("engines"))
+        for (id, text) in [("v-old", "old\n"), ("v-new", "new\n")] {
+            let source = root.appendingPathComponent("build-\(id)")
+            try write("build-\(id)/bin/wine", text)
+            let manifest = EngineManifest(id: id, wineTag: "wine-11.0", wineSourceCommit: "t",
+                                          dxmtTag: "v0.74", dxmtCommit: "t", patches: [], build: [:],
+                                          artifacts: try EngineStore.artifactHashes(of: source),
+                                          createdAt: Date(timeIntervalSince1970: 0))
+            try store.install(from: source, manifest: manifest, fault: nil)
+        }
+        XCTAssertEqual(try store.activeID(), "v-new")
+        // fail only the previous link, the way a crash between the two would.
+        store.switchBarrier = { pending in
+            if pending.lastPathComponent.hasPrefix("previous") {
+                throw EngineStoreError.interrupted("stopped before previous")
+            }
+        }
+        XCTAssertThrowsError(try store.activate(id: "v-old"))
+        XCTAssertEqual(try store.activeID(), "v-new")
+    }
+
     func testPartialEngineIsNotReady() throws {
         let wine = try write("engines/wine11/Wine Stable.app/Contents/Resources/wine/bin/wine", "#!/bin/sh\necho wine-11.0\n")
         try FileManager.default.setAttributes([.posixPermissions: 0o755], ofItemAtPath: wine.path)

@@ -66,6 +66,26 @@ private func handleCLI() {
         }
     }
 
+    // print the newest launch report. the file on disk is already redacted.
+    if args.contains("--export-launch") {
+        guard let url = LaunchDiagnostic.latestReport() else {
+            print("decant: no launch reports yet in \(DecantLog.directory.path)")
+            exit(0)
+        }
+        print(url.path)
+        print((try? String(contentsOf: url, encoding: .utf8)) ?? "")
+        exit(0)
+    }
+
+    // swap back to the engine version the last install replaced.
+    if args.contains("--rollback-engine") {
+        runOrDie {
+            try EnginePaths.store.rollback()
+            print("decant: engine rolled back")
+            EngineManager.doctor()
+        }
+    }
+
     if args.contains("--gc") {
         let report = Housekeeping.evaluateDumps(bottle)
         print("decant: \(report.summary)")

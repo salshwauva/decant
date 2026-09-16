@@ -28,7 +28,7 @@ class EngineScripts(unittest.TestCase):
         path.write_text("#!/bin/bash\n" + text)
         path.chmod(0o755)
 
-    def launcher(self, same_prefix=True, wine_exit=0):
+    def launcher(self, same_prefix=True, wine_exit=0, store_version=None):
         script = self.checkout / "scripts/decant-launch.sh"
         script.parent.mkdir(parents=True)
         shutil.copy(REPO / "scripts/decant-launch.sh", script)
@@ -37,8 +37,17 @@ class EngineScripts(unittest.TestCase):
         shutil.copy(REPO / "engine/scripts/lib/common.sh", common)
         self.executable(self.checkout / "engine/scripts/launch-steam.sh",
                         'echo start >> "$DECANT_HOME/start"\n')
-        wine = self.support / "engines/wine11/Wine Stable.app/Contents/Resources/wine/bin/wine"
+        if store_version:
+            app = self.support / f"engines/versions/{store_version}/Wine Stable.app"
+            app.mkdir(parents=True)
+            link = self.support / "engines/current"
+            link.parent.mkdir(parents=True, exist_ok=True)
+            link.symlink_to(f"versions/{store_version}")
+        else:
+            app = self.support / "engines/wine11/Wine Stable.app"
+        wine = app / "Contents/Resources/wine/bin/wine"
         self.executable(wine, 'printf "%s\\n" "$@" > "$DECANT_HOME/args"\n'
+                        + f'echo "$0" > "$DECANT_HOME/which-wine"\n'
                         + f"exit {wine_exit}\n")
         steam = self.support / "bottles/steam11/drive_c/Program Files (x86)/Steam/steam.exe"
         steam.parent.mkdir(parents=True)
@@ -120,6 +129,83 @@ class EngineScripts(unittest.TestCase):
         self.assertEqual(subprocess.run(verify, env=env, capture_output=True).returncode, 0)
         env["DECANT_STEAMSETUP_SHA256"] = "0" * 64
         self.assertNotEqual(subprocess.run(verify, env=env, capture_output=True).returncode, 0)
+
+    def test_launcher_uses_the_active_store_version(self):
+        # common.sh resolves engines/current before the old engines/wine11.
+        script = self.launcher(store_version="v-1")
+        result = self.run_launcher(script, "play", "123")
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertIn("engines/current", (self.support / "which-wine").read_text())
+
+    def test_explicit_wine_bin_overrides_the_lookup(self):
+        # decant passes the engine it selected, so the script never picks one.
+        script = self.launcher(store_version="v-1")
+        other = self.support / "engines/versions/v-2/Wine Stable.app/Contents/Resources/wine/bin/wine"
+        self.executable(other, 'printf "%s\\n" "$@" > "$DECANT_HOME/args"\n'
+                        'echo "$0" > "$DECANT_HOME/which-wine"\n')
+        self.env["WINE_BIN"] = str(other)
+        result = self.run_launcher(script, "play", "123")
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertIn("v-2", (self.support / "which-wine").read_text())
+
+    def test_launch_id_reaches_the_log(self):
+        script = self.launcher()
+        self.env["DECANT_LAUNCH_ID"] = "id-7"
+        result = self.run_launcher(script, "play", "123")
+        self.assertEqual(result.returncode, 0, result.stderr)
+        log = (self.support / "logs/decant-launch.log").read_text()
+        self.assertIn("launch_id=id-7", log)
+
+    def store(self, body):
+        # run one engine store snippet against a temporary store root.
+        script = ("source %s\nsource %s\n" % (
+            REPO / "engine/scripts/lib/common.sh",
+            REPO / "engine/scripts/lib/engine-store.sh")) + body
+        return subprocess.run(["/bin/bash", "-c", script], env=self.env,
+                              capture_output=True, text=True, timeout=30)
+
+    def test_store_refuses_a_different_version_under_the_same_id(self):
+        result = self.store('''
+        mkdir -p "$ENGINE_STORE_ROOT/versions/v-1/bin"
+        printf 'first\n' > "$ENGINE_STORE_ROOT/versions/v-1/bin/wine"
+        engine_store_write_manifest "$ENGINE_STORE_ROOT/versions/v-1" v-1 wine-11.0 c v0.74 d
+        engine_store_activate v-1
+        mkdir -p "$ENGINE_STORE_ROOT/versions/v-1.partial/bin"
+        printf 'second\n' > "$ENGINE_STORE_ROOT/versions/v-1.partial/bin/wine"
+        engine_store_write_manifest "$ENGINE_STORE_ROOT/versions/v-1.partial" v-1 wine-11.0 c v0.74 d
+        engine_store_promote v-1 && exit 1
+        grep -q first "$ENGINE_STORE_ROOT/versions/v-1/bin/wine" || exit 1
+        [ ! -e "$ENGINE_STORE_ROOT/versions/v-1.partial" ] || exit 1
+        [ "$(basename "$(readlink "$ENGINE_STORE_ROOT/current")")" = v-1 ] || exit 1
+        ''')
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertIn("different contents", result.stderr)
+
+    def test_store_reuses_a_matching_version(self):
+        result = self.store('''
+        mkdir -p "$ENGINE_STORE_ROOT/versions/v-1/bin"
+        printf 'same\n' > "$ENGINE_STORE_ROOT/versions/v-1/bin/wine"
+        engine_store_write_manifest "$ENGINE_STORE_ROOT/versions/v-1" v-1 wine-11.0 c v0.74 d
+        mkdir -p "$ENGINE_STORE_ROOT/versions/v-1.partial/bin"
+        printf 'same\n' > "$ENGINE_STORE_ROOT/versions/v-1.partial/bin/wine"
+        engine_store_write_manifest "$ENGINE_STORE_ROOT/versions/v-1.partial" v-1 wine-11.0 c v0.74 d
+        engine_store_promote v-1 || exit 1
+        [ "$(basename "$(readlink "$ENGINE_STORE_ROOT/current")")" = v-1 ] || exit 1
+        [ ! -e "$ENGINE_STORE_ROOT/versions/v-1.partial" ] || exit 1
+        ''')
+        self.assertEqual(result.returncode, 0, result.stderr)
+
+    def test_store_activate_is_repeatable(self):
+        result = self.store('''
+        mkdir -p "$ENGINE_STORE_ROOT/versions/v-1/bin"
+        printf 'one\n' > "$ENGINE_STORE_ROOT/versions/v-1/bin/wine"
+        engine_store_write_manifest "$ENGINE_STORE_ROOT/versions/v-1" v-1 wine-11.0 c v0.74 d
+        engine_store_activate v-1
+        engine_store_activate v-1
+        [ "$(basename "$(readlink "$ENGINE_STORE_ROOT/current")")" = v-1 ] || exit 1
+        [ ! -e "$ENGINE_STORE_ROOT/previous" ] || exit 1
+        ''')
+        self.assertEqual(result.returncode, 0, result.stderr)
 
 
 if __name__ == "__main__":

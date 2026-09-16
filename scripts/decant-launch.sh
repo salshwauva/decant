@@ -8,7 +8,10 @@ SUP="${DECANT_HOME:-$HOME/Library/Application Support/decant}"
 export DECANT_HOME="$SUP"
 mkdir -p "$SUP/logs"
 LOG="$SUP/logs/decant-launch.log"
-log() { echo "[$(date -u +%Y-%m-%dT%H:%M:%SZ)] $*" | tee -a "$LOG" >&2; }
+# decant passes the launch id in the environment so one launch can be traced
+# from the ui, through this script, into the log.
+LAUNCH_ID="${DECANT_LAUNCH_ID:-none}"
+log() { echo "[$(date -u +%Y-%m-%dT%H:%M:%SZ)] launch_id=$LAUNCH_ID $*" | tee -a "$LOG" >&2; }
 
 # prefer the git tree engine (monorepo) when this script lives there;
 # otherwise the deployed copy under Application Support.
@@ -22,6 +25,8 @@ else
     exit 1
 fi
 
+# common.sh picks the active engine version and honors the WINE_APP,
+# WINE_BIN, WINESERVER_BIN and WINEPREFIX that decant passes in.
 source "$REPO/scripts/lib/common.sh"
 
 STEAM_DIR="$WINEPREFIX/drive_c/Program Files (x86)/Steam"
@@ -37,6 +42,9 @@ open_steam() {
 }
 
 send_request() {
+    # log the request before any check can end the script, so a failed launch
+    # still leaves its id in the log.
+    log "steam request: $*"
     require_wine_installed
     [[ -f "$STEAM_EXE" ]] || die "steam.exe missing at $STEAM_EXE"
     open_steam

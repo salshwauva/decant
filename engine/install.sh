@@ -83,7 +83,35 @@ fi
 for step in "${steps[@]}"; do
     log_step "$(basename "$step")"
     bash "$step" || die "$step failed; fix the error above and re-run install.sh"
+    # 01 activates the engine version this run asked for. a child cannot
+    # change this shell, so re-read the active version here; otherwise the
+    # later steps would write into the path this shell resolved first.
+    if [[ "$step" == *01-install-wine.sh && -d "$DECANT_HOME/engines/current/Wine Stable.app" ]]; then
+        WINE_APP="$DECANT_HOME/engines/current/Wine Stable.app"
+        WINE_BIN="$WINE_APP/Contents/Resources/wine/bin/wine"
+        WINESERVER_BIN="$WINE_APP/Contents/Resources/wine/bin/wineserver"
+        export WINE_APP WINE_BIN WINESERVER_BIN
+        log_info "WINE_APP     : $WINE_APP"
+    fi
 done
+
+# steps 02 through 08 write into the active version, so its manifest hashes
+# describe the wine copy before those writes. hash the finished engine so the
+# version still validates. a run that stops early leaves the manifest stale,
+# and the next run replaces that version instead of reusing it.
+if [[ -L "$DECANT_HOME/engines/current" ]]; then
+    # shellcheck source=scripts/lib/engine-store.sh
+    source "scripts/lib/engine-store.sh"
+    active_id=$(engine_store_active_id)
+    if [[ -n "$active_id" ]]; then
+        log_step "Hash the finished engine into manifest.json"
+        engine_store_write_manifest "$ENGINE_STORE_ROOT/versions/$active_id" "$active_id" \
+            "${ENGINE_WINE_TAG:-wine-11.0}" "${WINE_BUILD_BRANCH:-wine-11.0}" \
+            "${ENGINE_DXMT_TAG:-v0.74}" "${DXMT_FORK_SHA:-unset}"
+        engine_store_validate "$active_id" || die "engine $active_id does not validate after install"
+        log_ok "engine $active_id validates"
+    fi
+fi
 
 # keep a deployed recipe copy next to the runtime so launch-steam.sh and
 # the app always find scripts even if this git tree moves.

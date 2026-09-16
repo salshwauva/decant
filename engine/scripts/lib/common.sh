@@ -67,7 +67,16 @@ export PATH="$HOMEBREW_PREFIX/opt/bison/bin:$HOMEBREW_PREFIX/opt/flex/bin:$HOMEB
 : "${DECANT_HOME:=$HOME/Library/Application Support/decant}"
 export DECANT_HOME
 
-: "${WINE_APP:=$DECANT_HOME/engines/wine11/Wine Stable.app}"
+# the engine store keeps one directory per version under engines/versions
+# and points engines/current at the active one. installs made before the
+# store existed have only engines/wine11, so fall back to it.
+if [[ -z "${WINE_APP:-}" ]]; then
+    if [[ -d "$DECANT_HOME/engines/current/Wine Stable.app" ]]; then
+        WINE_APP="$DECANT_HOME/engines/current/Wine Stable.app"
+    else
+        WINE_APP="$DECANT_HOME/engines/wine11/Wine Stable.app"
+    fi
+fi
 : "${WINE_BIN:=$WINE_APP/Contents/Resources/wine/bin/wine}"
 : "${WINESERVER_BIN:=$WINE_APP/Contents/Resources/wine/bin/wineserver}"
 : "${WINEPREFIX:=$DECANT_HOME/bottles/steam11}"

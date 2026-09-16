@@ -5,7 +5,10 @@ struct ContentView: View {
     @State private var status: EngineStatus = .noEngine
     @State private var games: [Game] = []
     @State private var showingInstructions = false
-    @State private var launching: String? = nil
+    // the launch lifecycle lives here, not in a view. views read a snapshot.
+    @StateObject private var launcher = LaunchController.production(
+        bottle: EnginePaths.bottle(EngineManager.defaultBottle),
+        engine: Engine(wine: EnginePaths.wineBinary))
     @State private var selectedGame: Game? = nil
     // user-visible feedback: errors (red) and soft notes (dump trim, etc.)
     @State private var banner: String? = nil
@@ -53,17 +56,21 @@ struct ContentView: View {
             .padding(16)
         }
         .bevel(width: 3)
-        .onAppear(perform: refresh)
+        .onAppear {
+            refresh()
+            launcher.startPolling()
+        }
         .sheet(isPresented: $showingInstructions) {
             InstallInstructionsView(onOpenSteam: openSteam)
         }
         .sheet(item: $selectedGame) { game in
             GameDetailView(
                 game: game,
-                isLaunching: operationInProgress,
+                launch: launchSnapshot(for: game),
                 onPlay: { play(game) },
                 onClose: { selectedGame = nil },
-                onUninstall: { uninstall(game) }
+                onUninstall: { uninstall(game) },
+                onRecover: recover
             )
         }
     }
@@ -135,7 +142,7 @@ struct ContentView: View {
                 ScrollView(.vertical, showsIndicators: true) {
                     LazyVGrid(columns: columns, alignment: .leading, spacing: gridSpacing) {
                         ForEach(games) { game in
-                            ItemSlot(game: game, isLaunching: launching == game.appID) {
+                            ItemSlot(game: game, isLaunching: isLaunching(game)) {
                                 selectedGame = game
                             }
                         }
@@ -232,6 +239,11 @@ struct ContentView: View {
                         .font(.system(size: 10, design: .monospaced))
                         .foregroundColor(Palette.inkMut)
                 }
+                if let launch = launcher.snapshot, launch.phase != .idle {
+                    Text("launch \(launch.phase.label) · \(launch.elapsedLabel) · \(launch.explanation)")
+                        .font(.system(size: 10, design: .monospaced))
+                        .foregroundColor(launch.phase.isFailed ? Palette.wine : Palette.inkMut)
+                }
             }
             Spacer()
             Button {
@@ -316,18 +328,53 @@ struct ContentView: View {
     }
 
     private func openSteam() {
+        // opening steam waits for the script, so a shell failure lands in the
+        // banner. there is no game to watch here, so it gets no lifecycle.
         performRequest {
             let (engine, b) = try EngineManager.requireSteam()
             return try SteamManager.launchClient(b, engine: engine)
         }
     }
 
+    // the view asks for a launch and then only reads the snapshot. every
+    // process decision belongs to the controller.
     private func play(_ game: Game) {
         guard !operationInProgress else { return }
-        launching = game.appID
-        performRequest {
-            let (engine, b) = try EngineManager.requireReady()
-            return try SteamManager.launchGame(appID: game.appID, bottle: b, engine: engine)
+        do {
+            // requireReady still gates play, so a partial engine never starts
+            // a lifecycle. the controller owns everything after that.
+            let (_, b) = try EngineManager.requireReady()
+            launcher.requestPlay(appID: game.appID,
+                                 engineVersion: EnginePaths.engineVersionLabel,
+                                 prefix: b)
+            if launcher.snapshot?.lastRejection == .duplicate {
+                showNote("a launch is already in flight")
+            } else {
+                banner = nil
+            }
+        } catch {
+            showError(error)
+        }
+    }
+
+    private func launchSnapshot(for game: Game) -> LaunchSnapshot? {
+        guard let snap = launcher.snapshot, snap.appID == game.appID else { return nil }
+        return snap
+    }
+
+    private func isLaunching(_ game: Game) -> Bool {
+        launchSnapshot(for: game)?.isInFlight ?? false
+    }
+
+    private func recover(_ action: RecoveryAction) {
+        switch action {
+        case .retry:
+            launcher.retry()
+        case .openLog:
+            NSWorkspace.shared.open(DecantLog.fileURL)
+        case .runDoctor:
+            status = EngineManager.status()
+            showNote("\(status.headline) · wine: \(EnginePaths.wineBinary) · bottle: \(bottle.path)")
         }
     }
 
@@ -347,7 +394,6 @@ struct ContentView: View {
             let result = Result { try work() }
             DispatchQueue.main.async {
                 operationInProgress = false
-                launching = nil
                 switch result {
                 case .success(let note):
                     if let note { showNote(note) }

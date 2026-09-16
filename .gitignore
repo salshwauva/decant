@@ -13,6 +13,14 @@ engine/**/*.exe
 
 # agent files
 CLAUDE.md
+CLAUDE.local.md
 AGENTS.md
 GEMINI.md
+robots.md
 .claude/
+.cursor/
+.cursorrules
+.windsurfrules
+.aider*
+.continue/
+.github/copilot-instructions.md

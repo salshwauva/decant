@@ -57,7 +57,68 @@ After engine setup, run the smoke checks:
 ./scripts/smoke.sh
 ```
 
-The executable also supports `--self-test`, `--doctor`, and `--log`. Logs live at `~/Library/Application Support/decant/logs/decant.log`.
+The executable also supports `--self-test`, `--doctor`, `--log`, `--export-launch`, and `--rollback-engine`. Logs live at `~/Library/Application Support/decant/logs/decant.log`.
+
+## Engine versions and rollback
+
+Each engine version lives in its own directory. The `current` link names the active version. The `previous` link names the version it replaced.
+
+```
+engines/
+  versions/<id>/                one engine version
+  versions/<id>/manifest.json   pins plus a sha256 per artifact
+  versions/<id>.partial/        in-flight work
+  current   -> versions/<id>
+  previous  -> versions/<id>
+```
+
+An install runs five steps. `Sources/decant/EngineStore.swift` and `engine/scripts/lib/engine-store.sh` follow the same five:
+
+1. Copy the new engine into `versions/<id>.partial`.
+2. Hash every artifact the manifest lists (sha256).
+3. Validate the staged directory: manifest id, artifacts present, hashes.
+4. Rename `versions/<id>.partial` onto `versions/<id>`.
+5. Write `current.new`, rename it onto `current`, then point `previous` at the old id.
+
+A failure at any step leaves `current` on the version that was already active. One id names one set of bytes, so a second install under an id that is already there is refused unless the contents match.
+
+Roll back to the version `current` replaced:
+
+```sh
+decant --rollback-engine
+```
+
+A rollback changes the engine only. It does not undo a Steam install or a change inside the bottle.
+
+The self-test installs a fake engine into a temporary directory, fingerprints a fake prefix, then fails one install per fault case. It checks that the old engine is still active and that the prefix still hashes the same:
+
+```sh
+swift build -c release
+"$(swift build -c release --show-bin-path)/decant" --self-test
+```
+
+That run prints one `FAULT <name> recovered` line per case, then the count. The count it printed here was `N=6`. The smoke script fails when the count and the number of `FAULT` lines disagree.
+
+## Launch diagnostics
+
+A play press runs a state machine. Each phase change needs a named piece of evidence. The phases, the evidence, the timeouts, and what a detected process does and does not prove are in [the launch lifecycle notes](docs/launch-lifecycle.md).
+
+Every launch gets an id and a stage log. The id travels into the launch script and into the log, so one launch can be traced end to end. A finished or failed launch writes a redacted report:
+
+```sh
+decant --export-launch
+```
+
+The report hides the home path, the account name, and the Wine side user directories.
+
+A detected process proves only that a Windows process other than Steam runs in this bottle. It does not prove that a game reached its title screen.
+
+Count the launch cases the self-test ran:
+
+```sh
+"$(swift build -c release --show-bin-path)/decant" --self-test 2>/dev/null \
+  | grep -c '^ok   launch\|^ok   redact\|^ok   probe'
+```
 
 ## Source map
 
@@ -67,6 +128,7 @@ The executable also supports `--self-test`, `--doctor`, and `--log`. Logs live a
 | `engine/` | Wine, DXMT, and Steam install recipe |
 | `scripts/` | App bundle and launch scripts |
 | `Tests/` | Swift tests and engine tests |
+| `docs/` | Launch lifecycle notes, the review guide, and the security and test plan |
 | `Resources/` | Fonts, icons, and animation frames |
 
 ## Dependencies and credits

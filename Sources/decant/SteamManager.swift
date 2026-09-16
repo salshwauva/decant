@@ -87,14 +87,23 @@ enum SteamManager {
         !id.isEmpty && id.utf8.allSatisfy { $0 >= 48 && $0 <= 57 }
     }
 
-    private static func request(_ args: [String], bottle: URL, engine: Engine) throws {
-        let script = try requireLaunchScript()
+    // every request names the bottle and the engine it selected, so the
+    // script never falls back to whatever wine it finds. a launch id joins
+    // them when the request belongs to a tracked launch.
+    static func launchEnvironment(bottle: URL, engine: Engine, launchID: String? = nil) -> [String: String] {
         var env = EngineManager.bottleEnv(bottle)
         env["WINE_BIN"] = engine.wine
         let bin = URL(fileURLWithPath: engine.wine).deletingLastPathComponent()
         env["WINESERVER_BIN"] = bin.appendingPathComponent("wineserver").path
         env["WINE_APP"] = bin.deletingLastPathComponent().deletingLastPathComponent()
             .deletingLastPathComponent().deletingLastPathComponent().path
+        if let launchID { env["DECANT_LAUNCH_ID"] = launchID }
+        return env
+    }
+
+    private static func request(_ args: [String], bottle: URL, engine: Engine) throws {
+        let script = try requireLaunchScript()
+        let env = launchEnvironment(bottle: bottle, engine: engine)
         let result = try EngineManager.run("/bin/bash", [script.path] + args, extraEnv: env)
         if !result.err.isEmpty { DecantLog.line(result.err) }
         guard result.code == 0 else {
@@ -113,6 +122,7 @@ enum SteamManager {
     }
 
     // result message for the ui (e.g. dump trim note). throws on hard failure.
+    // this path waits for the script, so a shell error reaches the caller.
     @discardableResult
     static func launchClient(_ bottle: URL, engine: Engine) throws -> String? {
         let note = try clearDumpsIfBig(bottle)
@@ -130,6 +140,46 @@ enum SteamManager {
         try request(["play", appID], bottle: bottle, engine: engine)
         DecantLog.line("game launch request sent appid=\(appID)")
         return [note, "launch request sent to steam; game startup is not yet verified"].compactMap { $0 }.joined(separator: "; ")
+    }
+
+    // the pid of the wrapper decant started, plus a message for the ui
+    // (a dump trim note, say). the pid is the evidence that the request
+    // went out; it says nothing about whether wine got anywhere.
+    struct LaunchSpawn {
+        let pid: Int32
+        let note: String?
+    }
+
+    // the lifecycle overloads. they do not wait, because the controller has
+    // to keep polling while the script runs, so the script's exit status
+    // arrives later through onExit instead of a throw.
+    @discardableResult
+    static func launchClient(_ bottle: URL, engine: Engine, launchID: String,
+                             onExit: ((RunResult) -> Void)? = nil) throws -> LaunchSpawn {
+        let note = try clearDumpsIfBig(bottle)
+        let script = try requireLaunchScript()
+        let pid = try EngineManager.spawn(
+            "/bin/bash", [script.path, "steam"],
+            extraEnv: launchEnvironment(bottle: bottle, engine: engine, launchID: launchID),
+            onExit: onExit)
+        DecantLog.line("steam open request sent launch_id=\(launchID)")
+        return LaunchSpawn(pid: pid, note: note)
+    }
+
+    @discardableResult
+    static func launchGame(appID: String, bottle: URL, engine: Engine, launchID: String,
+                           onExit: ((RunResult) -> Void)? = nil) throws -> LaunchSpawn {
+        guard validAppID(appID) else {
+            throw DecantError.launch("invalid steam app id: \(appID)")
+        }
+        let note = try clearDumpsIfBig(bottle)
+        let script = try requireLaunchScript()
+        let pid = try EngineManager.spawn(
+            "/bin/bash", [script.path, "play", appID],
+            extraEnv: launchEnvironment(bottle: bottle, engine: engine, launchID: launchID),
+            onExit: onExit)
+        DecantLog.line("game launch request sent appid=\(appID) launch_id=\(launchID)")
+        return LaunchSpawn(pid: pid, note: note)
     }
 
     static func uninstallGame(appID: String, bottle: URL, engine: Engine) throws {
