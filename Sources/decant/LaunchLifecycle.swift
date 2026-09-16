@@ -63,6 +63,7 @@ indirect enum LaunchFailure: Equatable {
     case timeout(from: LaunchPhase)
     case spawn(Int32)
     case engineMissing
+    case notReady(String)
     case duplicate
     case probe(String)
 
@@ -74,6 +75,8 @@ indirect enum LaunchFailure: Equatable {
             return "could not start the launch script (exit \(code))"
         case .engineMissing:
             return "no engine on disk: run bash engine/install.sh"
+        case .notReady(let why):
+            return "the engine is not ready: \(why)"
         case .duplicate:
             return "a launch is already in flight, so this play was ignored"
         case .probe(let why):

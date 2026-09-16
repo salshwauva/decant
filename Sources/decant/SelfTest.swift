@@ -287,8 +287,16 @@ enum SelfTest {
         sent.tick()
         record("launch timeout request sent",
                sent.phase == .failed(.timeout(from: .requestSent)), "phase is \(sent.phase.label)")
+        record("launch timeout stops the launcher",
+               sentSpawner.terminated == [4343], "terminated \(sentSpawner.terminated)")
 
         // 7. the game shows up in the prefix, so the launch completes.
+        // the report carries the tail of the log, so write a real home path
+        // into the log first. without it the report holds no home path and
+        // the redaction check below could pass on text that was never
+        // redacted at all.
+        let realHome = fm.homeDirectoryForCurrentUser.path
+        DecantLog.line("fixture opened \(realHome)/Library/Application Support/decant/logs")
         let liveClock = FakeLaunchClock(Date(timeIntervalSince1970: 0))
         let liveProbe = FakeProcessProbe()
         liveProbe.steam = true
@@ -316,17 +324,42 @@ enum SelfTest {
         record("launch shell failure reaches the controller",
                late.phase == .failed(.spawn(3)), "phase is \(late.phase.label)")
 
-        // 7c. a callback from a launch that already ended changes nothing.
-        let staleClock = FakeLaunchClock(Date(timeIntervalSince1970: 0))
-        let staleProbe = FakeProcessProbe()
-        staleProbe.steam = true
-        let staleSpawner = FakeLaunchSpawner()
-        let stale = LaunchController(clock: staleClock, probe: staleProbe, spawner: staleSpawner)
-        stale.requestPlay(appID: "2432860", engineVersion: "self-test", prefix: prefix)
-        let stalePhase = stale.phase
-        stale.deliverExit(launchID: liveID, result: RunResult(code: 9, out: "", err: "old"))
-        record("launch ignores a stale exit", stale.phase == stalePhase,
-               "phase is \(stale.phase.label)")
+        // a failed launch stops the launcher it started, so the process ends
+        // and its output files stop growing.
+        record("launch failure stops the launcher",
+               lateSpawner.terminated == [4343], "terminated \(lateSpawner.terminated)")
+
+        // 7c. the same controller retries, so the first launch is over. its
+        // exit callback arrives late and must change nothing.
+        let firstExit = lateSpawner.gameExit
+        late.retry()
+        let secondID = late.snapshot?.id ?? "none"
+        let secondPhase = late.phase
+        record("retry starts a new launch",
+               secondID != liveID && secondPhase == .requestSent,
+               "id \(secondID) phase \(secondPhase.label)")
+        firstExit?(RunResult(code: 9, out: "", err: "old launch"))
+        record("launch ignores a stale exit", late.phase == secondPhase,
+               "phase is \(late.phase.label)")
+
+        // 7e. play and retry pass the same engine gate. a not-ready engine
+        // starts nothing, either way.
+        let gateSpawner = FakeLaunchSpawner()
+        let gateProbe = FakeProcessProbe()
+        gateProbe.steam = true
+        let gated = LaunchController(clock: FakeLaunchClock(Date(timeIntervalSince1970: 0)),
+                                     probe: gateProbe, spawner: gateSpawner,
+                                     ready: { throw DecantError.launch("Wine 11.0 is required") })
+        gated.requestPlay(appID: "2432860", engineVersion: "self-test", prefix: prefix)
+        record("play refuses a not-ready engine",
+               gated.phase == .failed(.notReady("launch failed: Wine 11.0 is required")),
+               "phase is \(gated.phase.label)")
+        gated.retry()
+        record("retry refuses a not-ready engine and spawns nothing",
+               gateSpawner.steamStarts == 0 && gateSpawner.gameStarts == 0
+                 && gated.phase.isFailed,
+               "steam=\(gateSpawner.steamStarts) game=\(gateSpawner.gameStarts) "
+                 + "phase=\(gated.phase.label)")
 
         // 7d. the prefix match uses the same boundary rule as the shell, so a
         // longer prefix name is not this bottle.
@@ -382,8 +415,12 @@ enum SelfTest {
         let reportText = (try? String(contentsOf: reportPath, encoding: .utf8)) ?? ""
         record("launch report names the launch id",
                reportText.contains(launchID), reportText)
+        record("launch report carries the fixture log line",
+               reportText.contains("fixture opened"), reportText)
         record("launch report hides the home path",
                !reportText.isEmpty && !reportText.contains(home), reportText)
+        record("launch report masks the home path it carried",
+               reportText.contains("~/Library/Application Support/decant/logs"), reportText)
     }
 }
 
@@ -410,6 +447,7 @@ final class FakeLaunchSpawner: LaunchSpawner {
     private(set) var gameStarts = 0
     private(set) var steamExit: ((RunResult) -> Void)?
     private(set) var gameExit: ((RunResult) -> Void)?
+    private(set) var terminated: [Int32] = []
 
     func startSteam(launchID: String, onExit: @escaping (RunResult) -> Void) throws -> Int32 {
         steamStarts += 1
@@ -423,4 +461,6 @@ final class FakeLaunchSpawner: LaunchSpawner {
         gameExit = onExit
         return 4343
     }
+
+    func terminate(pid: Int32) { terminated.append(pid) }
 }

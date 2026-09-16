@@ -47,6 +47,7 @@ enum EngineStoreError: Error, CustomStringConvertible {
     case validationFailed(String)
     case interrupted(String)
     case noPrevious
+    case restoreFailed(String)
 
     var description: String {
         switch self {
@@ -54,6 +55,7 @@ enum EngineStoreError: Error, CustomStringConvertible {
         case .validationFailed(let s): return "validation failed: \(s)"
         case .interrupted(let s): return "interrupted: \(s)"
         case .noPrevious: return "no previous engine version to roll back to"
+        case .restoreFailed(let s): return "restore failed: \(s)"
         }
     }
 }
@@ -167,7 +169,19 @@ struct EngineStore {
             do {
                 try link(previousURL, to: "versions/\(old)")
             } catch {
-                try? link(currentURL, to: "versions/\(old)")
+                // the restore can fail too. that leaves current on the new
+                // version with no record of the old one, so the error names
+                // both versions and both failures.
+                do {
+                    try link(currentURL, to: "versions/\(old)")
+                } catch let restore {
+                    let text = "could not record previous \(old) after activating \(id): "
+                        + "\(error); and could not restore current to \(old): \(restore)"
+                    DecantLog.line("engine store: \(text)")
+                    throw EngineStoreError.restoreFailed(text)
+                }
+                DecantLog.line("engine store: could not record previous \(old) after activating "
+                    + "\(id): \(error); current is back on \(old)")
                 throw error
             }
         }

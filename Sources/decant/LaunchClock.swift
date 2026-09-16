@@ -19,6 +19,8 @@ protocol LaunchSpawner {
     func startSteam(launchID: String, onExit: @escaping (RunResult) -> Void) throws -> Int32
     func startGame(appID: String, launchID: String,
                    onExit: @escaping (RunResult) -> Void) throws -> Int32
+    // stop a launcher this spawner started, when a launch gives up on it.
+    func terminate(pid: Int32)
 }
 
 struct SystemClock: LaunchClock {
@@ -122,5 +124,9 @@ struct SteamLaunchSpawner: LaunchSpawner {
                    onExit: @escaping (RunResult) -> Void) throws -> Int32 {
         try SteamManager.launchGame(appID: appID, bottle: bottle, engine: engine,
                                     launchID: launchID, onExit: onExit).pid
+    }
+
+    func terminate(pid: Int32) {
+        EngineManager.terminateSpawn(pid: pid)
     }
 }

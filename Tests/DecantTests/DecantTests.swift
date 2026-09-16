@@ -152,8 +152,8 @@ final class DecantTests: XCTestCase {
     }
 
     // the lifecycle path does not wait for the script, so the exit status
-    // arrives later. it must still reach the caller.
-    func testAsyncShellFailureReachesController() throws {
+    // arrives later. the spawn must carry that status back.
+    func testSpawnDeliversExitStatus() throws {
         try write("engine/decant-launch.sh", "echo missing-steam >&2\nexit 9\n")
         let done = expectation(description: "exit")
         var seen: RunResult?
@@ -167,6 +167,45 @@ final class DecantTests: XCTestCase {
         wait(for: [done], timeout: 10)
         XCTAssertEqual(seen?.code, 9)
         XCTAssertTrue(seen?.err.contains("missing-steam") == true)
+    }
+
+    // and the controller must turn that late status into a failed launch,
+    // then stop the launcher it started.
+    func testAsyncShellFailureReachesController() throws {
+        let prefix = EnginePaths.bottle("steam11")
+        try FileManager.default.createDirectory(at: prefix, withIntermediateDirectories: true)
+        let probe = FakeProcessProbe()
+        probe.steam = true
+        let spawner = FakeLaunchSpawner()
+        let controller = LaunchController(clock: FakeLaunchClock(Date(timeIntervalSince1970: 0)),
+                                          probe: probe, spawner: spawner)
+        controller.requestPlay(appID: "100", engineVersion: "test", prefix: prefix)
+        XCTAssertEqual(controller.phase, .requestSent)
+        XCTAssertEqual(spawner.gameStarts, 1)
+
+        spawner.gameExit?(RunResult(code: 9, out: "", err: "missing-steam"))
+        XCTAssertEqual(controller.phase, .failed(.spawn(9)))
+        XCTAssertEqual(controller.snapshot?.phase, .failed(.spawn(9)))
+        XCTAssertEqual(spawner.terminated, [4343])
+    }
+
+    // play and retry pass the same engine gate, so neither starts a launch
+    // on an engine that is not ready.
+    func testRetryPassesTheEngineGate() throws {
+        let prefix = EnginePaths.bottle("steam11")
+        try FileManager.default.createDirectory(at: prefix, withIntermediateDirectories: true)
+        let probe = FakeProcessProbe()
+        probe.steam = true
+        let spawner = FakeLaunchSpawner()
+        let controller = LaunchController(clock: FakeLaunchClock(Date(timeIntervalSince1970: 0)),
+                                          probe: probe, spawner: spawner,
+                                          ready: { throw DecantError.noEngine })
+        controller.requestPlay(appID: "100", engineVersion: "test", prefix: prefix)
+        XCTAssertEqual(controller.phase, .failed(.engineMissing))
+        controller.retry()
+        XCTAssertEqual(controller.phase, .failed(.engineMissing))
+        XCTAssertEqual(spawner.steamStarts, 0)
+        XCTAssertEqual(spawner.gameStarts, 0)
     }
 
     // the swift probe uses the same boundary rule as the shell helper.
@@ -227,6 +266,41 @@ final class DecantTests: XCTestCase {
         }
         XCTAssertThrowsError(try store.activate(id: "v-old"))
         XCTAssertEqual(try store.activeID(), "v-new")
+    }
+
+    // when the restore fails too, the error names both versions and both
+    // failures, so the state on disk is not a silent surprise.
+    func testEngineStoreReportsAFailedRestore() throws {
+        var store = EngineStore(root: root.appendingPathComponent("engines"))
+        for (id, text) in [("v-old", "old\n"), ("v-new", "new\n")] {
+            let source = root.appendingPathComponent("build-\(id)")
+            try write("build-\(id)/bin/wine", text)
+            let manifest = EngineManifest(id: id, wineTag: "wine-11.0", wineSourceCommit: "t",
+                                          dxmtTag: "v0.74", dxmtCommit: "t", patches: [], build: [:],
+                                          artifacts: try EngineStore.artifactHashes(of: source),
+                                          createdAt: Date(timeIntervalSince1970: 0))
+            try store.install(from: source, manifest: manifest, fault: nil)
+        }
+        // the previous link fails, and so does the attempt to put current back.
+        var currentWrites = 0
+        store.switchBarrier = { pending in
+            if pending.lastPathComponent.hasPrefix("previous") {
+                throw EngineStoreError.interrupted("stopped before previous")
+            }
+            currentWrites += 1
+            if currentWrites > 1 {
+                throw EngineStoreError.interrupted("stopped before the restore")
+            }
+        }
+        XCTAssertThrowsError(try store.activate(id: "v-old")) { error in
+            guard case EngineStoreError.restoreFailed(let text) = error else {
+                return XCTFail("expected restoreFailed, got \(error)")
+            }
+            XCTAssertTrue(text.contains("v-old"))
+            XCTAssertTrue(text.contains("v-new"))
+            XCTAssertTrue(text.contains("stopped before previous"))
+            XCTAssertTrue(text.contains("stopped before the restore"))
+        }
     }
 
     func testPartialEngineIsNotReady() throws {

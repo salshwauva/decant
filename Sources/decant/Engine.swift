@@ -263,8 +263,23 @@ enum EngineManager {
         let errURL = directory.appendingPathComponent("stderr")
         fm.createFile(atPath: outURL.path, contents: nil)
         fm.createFile(atPath: errURL.path, contents: nil)
-        let out = try FileHandle(forWritingTo: outURL)
-        let err = try FileHandle(forWritingTo: errURL)
+        // every throw before p.run() goes through one cleanup path, so an
+        // open handle or a temporary directory never outlives this call.
+        var started = false
+        var out: FileHandle?
+        var err: FileHandle?
+        defer {
+            if !started {
+                try? out?.close()
+                try? err?.close()
+                try? fm.removeItem(at: directory)
+            }
+        }
+        out = try FileHandle(forWritingTo: outURL)
+        err = try FileHandle(forWritingTo: errURL)
+        guard let out, let err else {
+            throw DecantError.launch("could not open output files for \(launch)")
+        }
         p.standardOutput = out
         p.standardError = err
         p.standardInput = FileHandle.nullDevice
@@ -282,15 +297,19 @@ enum EngineManager {
             onExit?(result)
         }
         DecantLog.line("spawn: \(launch) \(args.joined(separator: " "))")
-        do {
-            try p.run()
-        } catch {
-            try? out.close()
-            try? err.close()
-            try? fm.removeItem(at: directory)
-            throw error
-        }
+        try p.run()
+        started = true
         return p.processIdentifier
+    }
+
+    // stop a launcher this process started. it signals the launch script
+    // only. wine and steam descendants keep running on purpose, because one
+    // of them can be the game the user is playing.
+    static func terminateSpawn(pid: Int32) {
+        guard pid > 0 else { return }
+        if kill(pid, SIGTERM) == 0 {
+            DecantLog.line("asked launcher pid=\(pid) to stop")
+        }
     }
 
     private static func outputTail(_ url: URL) throws -> String {

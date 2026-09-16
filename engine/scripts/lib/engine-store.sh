@@ -205,9 +205,15 @@ engine_store_activate() {
         if ! { ln -sfn "versions/$old" "$ENGINE_STORE_ROOT/previous.new" \
             && mv -fh "$ENGINE_STORE_ROOT/previous.new" "$ENGINE_STORE_ROOT/previous"; }; then
             rm -f "$ENGINE_STORE_ROOT/previous.new"
-            ln -sfn "versions/$old" "$ENGINE_STORE_ROOT/current.new"
-            mv -fh "$ENGINE_STORE_ROOT/current.new" "$ENGINE_STORE_ROOT/current"
-            log_error "could not record previous; current stays on $old"
+            # the restore can fail too, so check it and name both versions
+            # either way. the caller gets a failure in both cases.
+            if { ln -sfn "versions/$old" "$ENGINE_STORE_ROOT/current.new" \
+                && mv -fh "$ENGINE_STORE_ROOT/current.new" "$ENGINE_STORE_ROOT/current"; }; then
+                log_error "could not record previous $old after activating $id; current is back on $old"
+            else
+                rm -f "$ENGINE_STORE_ROOT/current.new"
+                log_error "could not record previous $old after activating $id, and could not restore current to $old; current names $id"
+            fi
             return 1
         fi
     fi

@@ -55,18 +55,26 @@ final class LaunchController: ObservableObject {
     private let clock: LaunchClock
     private let probe: ProcessProbe
     private let spawner: LaunchSpawner
+    // the engine gate. play and retry both run it, so neither can start a
+    // launch on an engine that is not ready. production passes requireReady.
+    private let ready: () throws -> Void
     private var session: LaunchSession?
     private var prefix: URL?
     private var lastRejection: LaunchFailure?
     private var timer: Timer?
+    // the launcher this session started, so a launch that gives up can stop
+    // it. zero when nothing is running.
+    private var launcherPID: Int32 = 0
 
     // how often production polls the probe and the timeouts.
     private let pollSeconds: TimeInterval = 2
 
-    init(clock: LaunchClock, probe: ProcessProbe, spawner: LaunchSpawner) {
+    init(clock: LaunchClock, probe: ProcessProbe, spawner: LaunchSpawner,
+         ready: @escaping () throws -> Void = {}) {
         self.clock = clock
         self.probe = probe
         self.spawner = spawner
+        self.ready = ready
     }
 
     deinit { timer?.invalidate() }
@@ -113,6 +121,20 @@ final class LaunchController: ObservableObject {
         DecantLog.line("launch_id=\(fresh.id) phase=preparing appid=\(appID) engine=\(engineVersion)")
         publish()
 
+        // the same gate play uses. retry comes back through here, so a
+        // not-ready engine stops both.
+        do {
+            try ready()
+        } catch {
+            switch error {
+            case DecantError.noEngine, DecantError.noBottle:
+                fail(.engineMissing)
+            default:
+                fail(.notReady(String(describing: error)))
+            }
+            return
+        }
+
         guard FileManager.default.fileExists(atPath: prefix.path) else {
             fail(.probe("no bottle at \(prefix.path)"))
             return
@@ -130,6 +152,7 @@ final class LaunchController: ObservableObject {
     func reset() {
         session = nil
         lastRejection = nil
+        launcherPID = 0
         publish()
     }
 
@@ -177,17 +200,23 @@ final class LaunchController: ObservableObject {
     }
 
     // the launch script exited. a nonzero status is the failure the old
-    // spawn path used to lose. a callback from an earlier launch is stale
-    // and changes nothing.
+    // spawn path used to lose. every exit is logged with its launch id. a
+    // callback from an earlier launch is stale and changes nothing, and an
+    // exit that lands after the launch already ended only gets a log line.
     func deliverExit(launchID: String, result: RunResult) {
         let apply = { [weak self] in
-            guard let self, let live = self.session, live.id == launchID else { return }
-            guard live.phase.isInFlight else { return }
-            guard result.code != 0 else {
-                DecantLog.line("launch_id=\(launchID) launch script finished clean")
+            guard let self else { return }
+            guard let live = self.session, live.id == launchID else {
+                DecantLog.line("launch_id=\(launchID) stale exit \(result.code) ignored")
                 return
             }
             DecantLog.line("launch_id=\(launchID) launch script exited \(result.code)")
+            guard result.code != 0 else { return }
+            guard live.phase.isInFlight else {
+                DecantLog.line("launch_id=\(launchID) exit \(result.code) arrived after the "
+                    + "launch ended in \(live.phase.label)")
+                return
+            }
             self.advance(.spawnFailed(result.code), at: self.clock.now(), exitCode: result.code)
             self.finish()
         }
@@ -207,6 +236,7 @@ final class LaunchController: ObservableObject {
             let pid = try spawner.startSteam(launchID: id) { [weak self] result in
                 self?.deliverExit(launchID: id, result: result)
             }
+            launcherPID = pid
             DecantLog.line("launch_id=\(live.id) steam wrapper pid=\(pid)")
         } catch {
             spawnFailed(error)
@@ -220,6 +250,7 @@ final class LaunchController: ObservableObject {
             let pid = try spawner.startGame(appID: live.appID, launchID: id) { [weak self] result in
                 self?.deliverExit(launchID: id, result: result)
             }
+            launcherPID = pid
             advance(.requestSpawned(pid: pid), at: clock.now(), exitCode: nil)
             DecantLog.line("launch_id=\(live.id) phase=request_sent pid=\(pid)")
         } catch {
@@ -251,6 +282,7 @@ final class LaunchController: ObservableObject {
         session = live
         DecantLog.line("launch_id=\(live.id) phase=failed \(failure.explanation)")
         publish()
+        stopLauncher()
         writeDiagnostic()
     }
 
@@ -267,11 +299,22 @@ final class LaunchController: ObservableObject {
         publish()
     }
 
-    // a launch is over: log the stages and write a redacted report.
+    // a launch is over: log the stages and write a redacted report. a launch
+    // that failed also stops the launcher it started, so the process ends,
+    // its handles close and its output files stop growing. this signals the
+    // launch script only. wine and steam keep running on purpose, because
+    // one of those descendants can be a game the user is playing.
     private func finish() {
         guard let live = session else { return }
         DecantLog.line("launch_id=\(live.id) phase=\(live.phase.label) stages=\(live.stages.count)")
+        if live.phase.isFailed { stopLauncher() }
         writeDiagnostic()
+    }
+
+    private func stopLauncher() {
+        guard launcherPID > 0 else { return }
+        spawner.terminate(pid: launcherPID)
+        launcherPID = 0
     }
 
     private func writeDiagnostic() {
@@ -308,7 +351,8 @@ extension LaunchController {
         LaunchController(
             clock: SystemClock(),
             probe: SystemProcessProbe(),
-            spawner: SteamLaunchSpawner(bottle: bottle, engine: engine)
+            spawner: SteamLaunchSpawner(bottle: bottle, engine: engine),
+            ready: { _ = try EngineManager.requireReady() }
         )
     }
 }
