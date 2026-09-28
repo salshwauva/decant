@@ -39,7 +39,8 @@ fi
 
 log_step "Stopping stale Wine processes for this prefix"
 [[ -x "$WINESERVER_BIN" ]] || die "wineserver missing at $WINESERVER_BIN"
-WINEPREFIX="$WINEPREFIX" "$WINESERVER_BIN" -k
+# -k exits 1 when no server runs for this prefix, which is the normal cold start.
+WINEPREFIX="$WINEPREFIX" "$WINESERVER_BIN" -k || true
 WINEPREFIX="$WINEPREFIX" "$WINESERVER_BIN" -w
 
 # -- 2. Purge Chromium SingletonLock -----------------------------------------
