@@ -1,5 +1,7 @@
 import XCTest
 import Foundation
+import AppKit
+import ImageIO
 @testable import decant
 
 final class DecantTests: XCTestCase {
@@ -184,5 +186,87 @@ final class DecantTests: XCTestCase {
         try FileManager.default.createSymbolicLink(at: DecantLog.fileURL, withDestinationURL: outside)
         DecantLog.line("must not overwrite")
         XCTAssertEqual(try String(contentsOf: outside), "keep")
+    }
+
+    func testLauncherURLRoundTrip() {
+        let url = GameLaunchers.playURL("758870")
+        XCTAssertEqual(url?.absoluteString, "decant://play/758870")
+        XCTAssertEqual(url.flatMap(GameLaunchers.appID(from:)), "758870")
+        XCTAssertNil(GameLaunchers.playURL("1;rm"))
+        for bad in ["decant://play/1/2", "decant://other/1", "https://play/1", "decant://play/abc"] {
+            XCTAssertNil(GameLaunchers.appID(from: URL(string: bad)!), bad)
+        }
+    }
+
+    func testLauncherSyncWritesEveryTargetAndRemovesSteamShortcut() throws {
+        let hash = String(repeating: "ab", count: 20)
+        let bottle = root.appendingPathComponent("bottle")
+        let ico = bottle.appendingPathComponent("drive_c/Program Files (x86)/Steam/steam/games/\(hash).ico")
+        try FileManager.default.createDirectory(at: ico.deletingLastPathComponent(), withIntermediateDirectories: true)
+        try icoData(side: 32).write(to: ico)
+        let shortcut = try write("Desktop/Kynseed.desktop", "Exec=wine start.exe steam://rungameid/758870\nIcon=7836_\(hash).0\n")
+        let other = try write("Desktop/Kynseed.url", "URL=steam://rungameid/1\n")
+        let steam = try write("Desktop/Steam.desktop", "Exec=wine steam.exe\n")
+        let desktop = root.appendingPathComponent("Desktop")
+        let apps = root.appendingPathComponent("Apps")
+        let game = Game(appID: "758870", name: "Kynseed")
+
+        XCTAssertEqual(GameLaunchers.sync([game], bottle: bottle, desktop: desktop, targets: [apps, desktop]), [])
+        for dir in [apps, desktop] {
+            let contents = dir.appendingPathComponent("Kynseed.app/Contents")
+            let plist = try XCTUnwrap(NSDictionary(contentsOf: contents.appendingPathComponent("Info.plist")))
+            XCTAssertEqual(plist["DecantAppID"] as? String, "758870")
+            XCTAssertEqual(plist["DecantIcon"] as? String, "steam")
+            let launch = contents.appendingPathComponent("MacOS/launch")
+            XCTAssertTrue(try String(contentsOf: launch).contains("\"decant://play/758870\""))
+            XCTAssertTrue(FileManager.default.isExecutableFile(atPath: launch.path))
+            let icns = contents.appendingPathComponent("Resources/icon.icns") as CFURL
+            XCTAssertGreaterThan(CGImageSourceGetCount(try XCTUnwrap(CGImageSourceCreateWithURL(icns, nil))), 0)
+        }
+        XCTAssertFalse(FileManager.default.fileExists(atPath: shortcut.path))
+        XCTAssertTrue(FileManager.default.fileExists(atPath: other.path))
+        XCTAssertTrue(FileManager.default.fileExists(atPath: steam.path))
+
+        // with the shortcut gone, the cached icon keeps the launcher as is.
+        let plist = apps.appendingPathComponent("Kynseed.app/Contents/Info.plist").path
+        let before = try FileManager.default.attributesOfItem(atPath: plist)[.systemFileNumber] as? Int
+        XCTAssertEqual(GameLaunchers.sync([game], bottle: bottle, desktop: desktop, targets: [apps, desktop]), [])
+        XCTAssertEqual(try FileManager.default.attributesOfItem(atPath: plist)[.systemFileNumber] as? Int, before)
+    }
+
+    func testLauncherSyncLeavesForeignAppsAlone() throws {
+        let bottle = root.appendingPathComponent("bottle")
+        let apps = root.appendingPathComponent("Apps")
+        let desktop = root.appendingPathComponent("Desktop")
+        let mine = try write("Apps/Mine.app/Contents/Info.plist", "not a launcher")
+        let foreign = try write("Desktop/Kynseed.app/Contents/Info.plist", "not a launcher")
+        let shortcut = try write("Desktop/Kynseed.desktop", "Exec=wine start.exe steam://rungameid/758870\n")
+        let game = Game(appID: "758870", name: "Kynseed")
+
+        // a same-named app decant didn't make is never replaced, and the
+        // shortcut stays until every target has a launcher.
+        XCTAssertEqual(GameLaunchers.sync([game], bottle: bottle, desktop: desktop, targets: [apps, desktop]).count, 1)
+        XCTAssertEqual(try String(contentsOf: foreign), "not a launcher")
+        XCTAssertTrue(FileManager.default.fileExists(atPath: shortcut.path))
+        let made = try XCTUnwrap(NSDictionary(contentsOf: apps.appendingPathComponent("Kynseed.app/Contents/Info.plist")))
+        XCTAssertEqual(made["DecantIcon"] as? String, "medallion")
+
+        // once the game is gone, only decant's own launcher goes.
+        XCTAssertEqual(GameLaunchers.sync([], bottle: bottle, desktop: desktop, targets: [apps, desktop]), [])
+        XCTAssertFalse(FileManager.default.fileExists(atPath: apps.appendingPathComponent("Kynseed.app").path))
+        XCTAssertTrue(FileManager.default.fileExists(atPath: mine.path))
+        XCTAssertTrue(FileManager.default.fileExists(atPath: foreign.path))
+    }
+
+    private func icoData(side: Int) throws -> Data {
+        let rep = try XCTUnwrap(NSBitmapImageRep(
+            bitmapDataPlanes: nil, pixelsWide: side, pixelsHigh: side,
+            bitsPerSample: 8, samplesPerPixel: 4, hasAlpha: true, isPlanar: false,
+            colorSpaceName: .deviceRGB, bytesPerRow: 0, bitsPerPixel: 0))
+        let data = NSMutableData()
+        let dest = try XCTUnwrap(CGImageDestinationCreateWithData(data, "com.microsoft.ico" as CFString, 1, nil))
+        CGImageDestinationAddImage(dest, try XCTUnwrap(rep.cgImage), nil)
+        XCTAssertTrue(CGImageDestinationFinalize(dest))
+        return data as Data
     }
 }

@@ -54,6 +54,9 @@ struct ContentView: View {
         }
         .bevel(width: 3)
         .onAppear(perform: refresh)
+        .onOpenURL(perform: openLauncherURL)
+        // hand launcher urls to this window instead of opening a new one.
+        .handlesExternalEvents(preferring: ["*"], allowing: ["*"])
         .sheet(isPresented: $showingInstructions) {
             InstallInstructionsView(onOpenSteam: openSteam)
         }
@@ -297,7 +300,7 @@ struct ContentView: View {
                 switch scan {
                 case .success(let library):
                     games = library
-                    DesktopShortcuts.retheme(library, bottle: b)
+                    GameLaunchers.sync(library, bottle: b)
                 case .failure(let error): showError(error)
                 }
             }
@@ -329,6 +332,17 @@ struct ContentView: View {
             let (engine, b) = try EngineManager.requireReady()
             return try SteamManager.launchGame(appID: game.appID, bottle: b, engine: engine)
         }
+    }
+
+    // a game launcher opened decant://play/<appid>: same request as the play
+    // button. the shelf may still be loading on a cold start, so the name
+    // falls back to the id; only the id reaches steam.
+    private func openLauncherURL(_ url: URL) {
+        guard let appID = GameLaunchers.appID(from: url) else {
+            DecantLog.line("ignored url \(url.absoluteString)")
+            return
+        }
+        play(games.first { $0.appID == appID } ?? Game(appID: appID, name: appID))
     }
 
     private func uninstall(_ game: Game) {

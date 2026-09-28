@@ -94,8 +94,9 @@ private func handleCLI() {
     if args.contains("--theme-icons") {
         runOrDie {
             let games = try SteamManager.installedGames(bottle)
-            DesktopShortcuts.retheme(games, bottle: bottle)
-            print("decant: desktop icons checked for \(games.count) games")
+            let failures = GameLaunchers.sync(games, bottle: bottle)
+            for line in failures { print("decant: \(line)") }
+            print("decant: launchers checked for \(games.count) games")
         }
     }
 

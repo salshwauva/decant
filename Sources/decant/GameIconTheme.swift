@@ -1,19 +1,15 @@
 import SwiftUI
 import AppKit
 
-// stamps each game's official steam icon onto its desktop shortcut, and
-// makes the shortcut's finder label read as the plain game name.
+// the icon art for each game's launcher (see GameLaunchers).
 //
 // steam-under-wine drops a .desktop and a .url shortcut onto the real
 // macOS desktop for every installed game. each one points at the real
 // steam-assigned icon via an ICONFILE line
-// (C:\Program Files (x86)\Steam\steam\games\<hash>.ico inside the bottle),
-// but macOS renders neither shortcut format natively, so they show up as
-// blank generic files with the raw ".desktop"/".url" extension visible.
+// (C:\Program Files (x86)\Steam\steam\games\<hash>.ico inside the bottle).
 //
-// this loads that official .ico, upscales it with nearest-neighbor so the
-// pixel art stays crisp at every finder size, sets it as the file's custom
-// icon, and hides the extension so the label is just "Fields of Mistria".
+// this finds that official .ico and upscales it with nearest-neighbor so
+// the pixel art stays crisp at every finder size.
 
 enum GameIcon {
     // the finder sizes worth carrying so every place finder draws the icon
@@ -72,7 +68,7 @@ enum GameIcon {
     // redraws the source icon into a fresh multi-size image with
     // interpolation disabled, so upscaling a small (often 32px) steam .ico
     // to finder's larger sizes keeps hard pixel edges instead of blurring.
-    private static func crisp(_ src: NSImage) -> NSImage {
+    static func crisp(_ src: NSImage) -> NSImage {
         let out = NSImage(size: NSSize(width: 512, height: 512))
         for side in sizes {
             let rep = NSBitmapImageRep(
@@ -191,54 +187,5 @@ enum GameIconTheme {
         let str = NSAttributedString(string: glyph, attributes: attrs)
         let strSize = str.size()
         str.draw(at: NSPoint(x: point.x - strSize.width / 2, y: point.y - strSize.height / 2))
-    }
-}
-
-// finds the wine/steam-generated shortcuts for installed games on the real
-// desktop, stamps each with its official steam icon (falling back to a
-// themed medallion), and hides the .desktop/.url extension so the label
-// reads as the plain game name. steam regenerates these shortcuts whenever
-// it notices a game installed, always blank-iconed and extension-bare, so
-// this is safe and cheap to re-run on every refresh.
-enum DesktopShortcuts {
-    private static var fingerprints: [String: String] = [:]
-    private static var desktop: URL {
-        FileManager.default.urls(for: .desktopDirectory, in: .userDomainMask).first!
-    }
-
-    static func retheme(_ games: [Game], bottle: URL) {
-        let active = Set(games.map { bottle.path + "/" + $0.appID })
-        fingerprints = fingerprints.filter { active.contains($0.key) }
-        for game in games {
-            guard !game.name.contains("/"), game.name != ".", game.name != ".." else { continue }
-            let files = ["desktop", "url"].map { desktop.appendingPathComponent("\(game.name).\($0)") }
-                .filter { file in
-                    let info = try? file.resourceValues(forKeys: [.isRegularFileKey, .isSymbolicLinkKey])
-                    guard info?.isRegularFile == true, info?.isSymbolicLink != true,
-                          let text = try? String(contentsOf: file, encoding: .utf8) else { return false }
-                    let pattern = "steam://(?:rungameid|run)/" + game.appID + "(?:[^0-9]|$)"
-                    return text.range(of: pattern, options: .regularExpression) != nil
-                }
-            guard !files.isEmpty else { continue }
-            let key = bottle.path + "/" + game.appID
-            let iconPath = GameIcon.officialIcoPath(for: game, bottle: bottle, desktop: desktop)
-            let inputs = files + (iconPath.map { [URL(fileURLWithPath: $0)] } ?? [])
-            let fingerprint = inputs.map { file -> String in
-                let attrs = try? FileManager.default.attributesOfItem(atPath: file.path)
-                return "\(file.path):\(attrs?[.modificationDate] ?? ""): \(attrs?[.systemFileNumber] ?? ""): \(attrs?[.size] ?? "")"
-            }.joined(separator: "|")
-            guard fingerprints[key] != fingerprint else { continue }
-            let icon = GameIcon.official(for: game, bottle: bottle, desktop: desktop)
-                ?? GameIconTheme.icon(for: game)
-            var succeeded = true
-            for var file in files {
-                succeeded = NSWorkspace.shared.setIcon(icon, forFile: file.path, options: []) && succeeded
-                // show the label as just the game name, not "<game>.desktop".
-                var values = URLResourceValues()
-                values.hasHiddenExtension = true
-                do { try file.setResourceValues(values) } catch { succeeded = false }
-            }
-            if succeeded { fingerprints[key] = fingerprint }
-        }
     }
 }

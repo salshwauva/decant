@@ -53,6 +53,13 @@ cat > "$APP/Contents/Info.plist" <<'PLIST'
   <key>LSMinimumSystemVersion</key><string>13.0</string>
   <key>LSApplicationCategoryType</key><string>public.app-category.games</string>
   <key>NSHighResolutionCapable</key><true/>
+  <key>CFBundleURLTypes</key>
+  <array>
+    <dict>
+      <key>CFBundleURLName</key><string>com.sophia.decant.play</string>
+      <key>CFBundleURLSchemes</key><array><string>decant</string></array>
+    </dict>
+  </array>
 </dict>
 </plist>
 PLIST

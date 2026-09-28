@@ -11,6 +11,7 @@ enum DecantError: Error, CustomStringConvertible {
     case noBottle
     case bottleInit(String)
     case launch(String)
+    case launcher(String)
 
     var description: String {
         switch self {
@@ -22,6 +23,8 @@ enum DecantError: Error, CustomStringConvertible {
             return "bottle init failed: \(s)"
         case .launch(let s):
             return "launch failed: \(s)"
+        case .launcher(let s):
+            return "game launcher: \(s)"
         }
     }
 }
