@@ -97,6 +97,11 @@ enum SteamManager {
             .deletingLastPathComponent().deletingLastPathComponent().path
         let result = try EngineManager.run("/bin/bash", [script.path] + args, extraEnv: env)
         if !result.err.isEmpty { DecantLog.line(result.err) }
+        // the script exits 3 with the running app id on stdout when a game
+        // already runs in the bottle; nothing was started or stopped.
+        if result.code == 3 {
+            throw DecantError.gameRunning(result.out.trimmingCharacters(in: .whitespacesAndNewlines))
+        }
         guard result.code == 0 else {
             throw DecantError.launch(result.err.isEmpty ? "launcher exited \(result.code)" : result.err)
         }

@@ -38,16 +38,20 @@ class EngineScripts(unittest.TestCase):
         self.executable(self.checkout / "engine/scripts/launch-steam.sh",
                         'echo start >> "$DECANT_HOME/start"\n')
         wine = self.support / "engines/wine11/Wine Stable.app/Contents/Resources/wine/bin/wine"
-        self.executable(wine, 'printf "%s\\n" "$@" > "$DECANT_HOME/args"\n'
+        self.executable(wine, 'if [ "$1" = reg ]; then\n'
+                        '  printf "    RunningAppID    REG_DWORD    %s\\r\\n" "${RUNNING_HEX:-0x0}"; exit 0\n'
+                        'fi\n'
+                        'printf "%s\\n" "$@" > "$DECANT_HOME/args"\n'
                         + f"exit {wine_exit}\n")
         steam = self.support / "bottles/steam11/drive_c/Program Files (x86)/Steam/steam.exe"
         steam.parent.mkdir(parents=True)
         steam.touch()
         self.executable(self.bin / "arch", 'shift\nexec "$@"\n')
         self.executable(self.bin / "pgrep", "echo 101\n")
-        suffix = "" if same_prefix else " other"
-        self.executable(self.bin / "ps", 'printf "%s\\n" "steam.exe WINEPREFIX=$WINEPREFIX'
-                        + suffix + ' USER=test"\n')
+        # steam's working directory names its prefix; ps shows no environment.
+        prefix = "$WINEPREFIX" if same_prefix else "/elsewhere"
+        self.executable(self.bin / "lsof",
+                        f'echo "n{prefix}/drive_c/Program Files (x86)/Steam"\n')
         return script
 
     def run_launcher(self, script, *args):
@@ -63,6 +67,23 @@ class EngineScripts(unittest.TestCase):
 
     def test_prefix_with_same_start_is_not_accepted(self):
         script = self.launcher(same_prefix=False)
+        result = self.run_launcher(script, "play", "123")
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertEqual((self.support / "start").read_text(), "start\n")
+
+    def test_running_game_blocks_second_launch(self):
+        script = self.launcher()
+        self.env["RUNNING_HEX"] = "0x1a"
+        result = self.run_launcher(script, "play", "123")
+        self.assertEqual(result.returncode, 3, result.stderr)
+        self.assertEqual(result.stdout.strip(), "26")
+        self.assertIn("already running", result.stderr)
+        self.assertFalse((self.support / "start").exists())
+        self.assertFalse((self.support / "args").exists())
+
+    def test_running_game_in_another_prefix_is_ignored(self):
+        script = self.launcher(same_prefix=False)
+        self.env["RUNNING_HEX"] = "0x1a"
         result = self.run_launcher(script, "play", "123")
         self.assertEqual(result.returncode, 0, result.stderr)
         self.assertEqual((self.support / "start").read_text(), "start\n")

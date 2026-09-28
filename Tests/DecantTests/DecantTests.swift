@@ -138,6 +138,16 @@ final class DecantTests: XCTestCase {
         XCTAssertEqual(fields, [bottle.path, wine, root.appendingPathComponent("engine/Wine Stable.app").path, "play", "100"])
     }
 
+    func testRunningGameIsReportedNotLaunched() throws {
+        try write("engine/decant-launch.sh", "echo 26\nexit 3\n")
+        let wine = root.appendingPathComponent("engine/Wine Stable.app/Contents/Resources/wine/bin/wine").path
+        XCTAssertThrowsError(try SteamManager.launchGame(appID: "100", bottle: root.appendingPathComponent("bottle"),
+                                                         engine: Engine(wine: wine))) {
+            guard case DecantError.gameRunning(let id) = $0 else { return XCTFail("\($0)") }
+            XCTAssertEqual(id, "26")
+        }
+    }
+
     func testPartialEngineIsNotReady() throws {
         let wine = try write("engines/wine11/Wine Stable.app/Contents/Resources/wine/bin/wine", "#!/bin/sh\necho wine-11.0\n")
         try FileManager.default.setAttributes([.posixPermissions: 0o755], ofItemAtPath: wine.path)
@@ -186,6 +196,16 @@ final class DecantTests: XCTestCase {
         try FileManager.default.createSymbolicLink(at: DecantLog.fileURL, withDestinationURL: outside)
         DecantLog.line("must not overwrite")
         XCTAssertEqual(try String(contentsOf: outside), "keep")
+    }
+
+    func testBannerKeepsBoundedTail() {
+        let big = (0..<5000).map { "line \($0) " + String(repeating: "x", count: 500) }.joined(separator: "\n")
+        let tail = big.lastLines(12, width: 200)
+        let rows = tail.split(separator: "\n")
+        XCTAssertEqual(rows.count, 12)
+        XCTAssertTrue(rows.last!.hasPrefix("line 4999"))
+        XCTAssertTrue(rows.allSatisfy { $0.count <= 203 })
+        XCTAssertEqual("a\n\n  \nb".lastLines(12, width: 200), "a\nb")
     }
 
     func testLauncherURLRoundTrip() {

@@ -309,7 +309,9 @@ struct ContentView: View {
 
     private func showError(_ error: Error) {
         bannerIsError = true
-        banner = String(describing: error)
+        // a failed launch carries up to 64 KB of script output; the full text
+        // goes to the log, the banner keeps the tail so the window stays sized.
+        banner = String(describing: error).lastLines(12, width: 200)
         DecantLog.line("ui error: \(error)")
     }
 
@@ -365,10 +367,21 @@ struct ContentView: View {
                 switch result {
                 case .success(let note):
                     if let note { showNote(note) }
-                case .failure(let error): showError(error)
+                case .failure(let error):
+                    if case DecantError.gameRunning(let id) = error { showGameRunning(id) } else { showError(error) }
                 }
             }
         }
+    }
+
+    // a second launch never starts or stops anything; it only says so.
+    private func showGameRunning(_ appID: String) {
+        let name = games.first { $0.appID == appID }?.name ?? "app \(appID)"
+        DecantLog.line("launch blocked: \(name) already running")
+        let alert = NSAlert()
+        alert.messageText = "a game is already running"
+        alert.informativeText = "\(name) is running from decant. quit it before starting another game."
+        alert.runModal()
     }
 }
 
@@ -478,5 +491,16 @@ private struct LibraryHeightKey: PreferenceKey {
     static var defaultValue: CGFloat = 0
     static func reduce(value: inout CGFloat, nextValue: () -> CGFloat) {
         value = max(value, nextValue())
+    }
+}
+
+extension String {
+    // the last n non-empty lines, each cut to width characters.
+    func lastLines(_ n: Int, width: Int) -> String {
+        split(whereSeparator: \.isNewline)
+            .filter { !$0.allSatisfy(\.isWhitespace) }
+            .suffix(n)
+            .map { $0.count > width ? String($0.prefix(width)) + "..." : String($0) }
+            .joined(separator: "\n")
     }
 }

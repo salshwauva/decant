@@ -135,17 +135,31 @@ wine_run() {
         arch -x86_64 "$WINE_BIN" "$@"
 }
 
+# steam here starts in the bottle's Steam folder, so a process whose working
+# directory sits under this prefix belongs to it. (ps eww shows no environment
+# on current macOS, so the old WINEPREFIX match never fired and every launch
+# killed the running session.)
 prefix_steam_running() {
     local pid
     for pid in $(pgrep -if 'steam\.exe|steamwebhelper' 2>/dev/null || true); do
-        if ps eww -p "$pid" -o command= 2>/dev/null | python3 -c '
-import re, sys
-prefix = re.escape(sys.argv[1])
-pattern = r"(?:^| )WINEPREFIX=" + prefix + r"(?= [A-Za-z_][A-Za-z_0-9]*=|$)"
-sys.exit(0 if re.search(pattern, sys.stdin.read().rstrip()) else 1)
-' "$WINEPREFIX"; then
+        if lsof -a -d cwd -p "$pid" -Fn 2>/dev/null | grep -Fq -- "n$WINEPREFIX/"; then
             return 0
         fi
     done
     return 1
+}
+
+# app id of the game steam is running in this prefix, empty when none. steam
+# keeps it in the bottle registry as RunningAppID. skipped when no steam runs
+# here, so the query never starts a fresh wineserver.
+prefix_running_appid() {
+    prefix_steam_running || return 0
+    local hex
+    # reg.exe ends its lines with CRLF
+    hex=$(wine_run reg query 'HKCU\Software\Valve\Steam' /v RunningAppID 2>/dev/null \
+        | tr -d '\r' | awk '/RunningAppID/ {print $NF}') || true
+    if [[ "$hex" =~ ^0x[0-9a-fA-F]+$ ]] && (( hex != 0 )); then
+        echo $(( hex ))
+    fi
+    return 0
 }

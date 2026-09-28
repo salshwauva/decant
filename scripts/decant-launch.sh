@@ -6,6 +6,10 @@ set -euo pipefail
 
 SUP="${DECANT_HOME:-$HOME/Library/Application Support/decant}"
 export DECANT_HOME="$SUP"
+# no wine virtual desktop by default: under the current steam client its login
+# window lands off-screen and steam never signs in. set WINE_VIRTUAL_DESKTOP
+# (a WxH size, or "auto") to bring it back.
+export WINE_VIRTUAL_DESKTOP="${WINE_VIRTUAL_DESKTOP-}"
 mkdir -p "$SUP/logs"
 LOG="$SUP/logs/decant-launch.log"
 log() { echo "[$(date -u +%Y-%m-%dT%H:%M:%SZ)] $*" | tee -a "$LOG" >&2; }
@@ -50,8 +54,19 @@ validate_appid() {
     [[ "$1" =~ ^[0-9]+$ ]] || die "invalid steam app id"
 }
 
+# exit status when a game already runs in this bottle. the running app id goes
+# to stdout for the caller; nothing is started or stopped.
+EXIT_GAME_RUNNING=3
+
 play_game() {
     validate_appid "$1"
+    local running
+    running="$(prefix_running_appid)"
+    if [ -n "$running" ]; then
+        log "a game is already running from decant (app $running)"
+        echo "$running"
+        exit "$EXIT_GAME_RUNNING"
+    fi
     send_request -applaunch "$1" -force-d3d11-no-singlethreaded -screen-fullscreen 0
 }
 
