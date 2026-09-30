@@ -155,6 +155,19 @@ start_dialog_helper() {
     ( wine_run "$DIALOG_HELPER" "$title" "$program" "$button" "$DIALOG_WAIT" >>"$LOG" 2>&1 & )
 }
 
+# the launch flags are unity's. fields of mistria is not a unity game and quits
+# with exit code 2 when it gets them. a game counts as unity when UnityPlayer.dll
+# sits within three levels of its install folder. this is true only when the
+# folder is known and has none; a game whose folder cannot be found keeps the
+# flags, as before.
+non_unity_game() {
+    local dir
+    dir=$(sed -n 's/^[[:space:]]*"installdir"[[:space:]]*"\(.*\)".*/\1/p' \
+        "$STEAM_DIR/steamapps/appmanifest_$1.acf" 2>/dev/null | head -1) || true
+    [[ -n "$dir" && -d "$STEAM_DIR/steamapps/common/$dir" ]] || return 1
+    [[ -z "$(find "$STEAM_DIR/steamapps/common/$dir" -maxdepth 3 -name UnityPlayer.dll -print -quit 2>/dev/null)" ]]
+}
+
 # exit status when a game already runs in this bottle. the running app id goes
 # to stdout for the caller; nothing is started or stopped.
 EXIT_GAME_RUNNING=3
@@ -182,8 +195,13 @@ play_game() {
     started_from=$(log_offset "$CONSOLE_LOG")
     # the forwarder's exit status is ignored: it has returned 1 for launches
     # that worked. steam's own game process line decides.
-    steam_exe -applaunch "$1" -force-d3d11-no-singlethreaded -screen-fullscreen 0 \
-        || log "steam request command exited $?; checking whether the game started"
+    local status=0
+    if non_unity_game "$1"; then
+        steam_exe -applaunch "$1" || status=$?
+    else
+        steam_exe -applaunch "$1" -force-d3d11-no-singlethreaded -screen-fullscreen 0 || status=$?
+    fi
+    (( status == 0 )) || log "steam request command exited $status; checking whether the game started"
     wait_game_started "$1" "$started_from" \
         || { log "steam did not start app $1 within ${START_WAIT}s; see $LOG"; return 1; }
     log "steam started app $1"

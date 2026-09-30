@@ -249,6 +249,38 @@ class EngineScripts(unittest.TestCase):
         self.assertIn("dialog helper missing", result.stderr)
         self.assertIn("-applaunch\n758870\n", (self.support / "args").read_text())
 
+    def install_game(self, app, folder, unity=False):
+        steam = self.support / "bottles/steam11/drive_c/Program Files (x86)/Steam/steamapps"
+        steam.mkdir(parents=True, exist_ok=True)
+        (steam / f"appmanifest_{app}.acf").write_text(
+            f'"AppState"\n{{\n\t"appid"\t\t"{app}"\n\t"installdir"\t\t"{folder}"\n}}\n')
+        game = steam / "common" / folder
+        (game / "Windows").mkdir(parents=True)
+        if unity:
+            (game / "Windows/UnityPlayer.dll").touch()
+
+    def test_unity_game_keeps_the_launch_flags(self):
+        script = self.launcher()
+        self.install_game("123", "Some Unity Game", unity=True)
+        result = self.run_launcher(script, "play", "123")
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertIn("-applaunch\n123\n-force-d3d11-no-singlethreaded\n-screen-fullscreen\n0\n",
+                      (self.support / "args").read_text())
+
+    def test_other_games_get_no_unity_flags(self):
+        script = self.launcher()
+        self.install_game("123", "Some Other Game")
+        result = self.run_launcher(script, "play", "123")
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertEqual((self.support / "args").read_text().split("\n")[-3:],
+                         ["-applaunch", "123", ""])
+
+    def test_game_with_unknown_folder_keeps_the_launch_flags(self):
+        script = self.launcher()
+        result = self.run_launcher(script, "play", "123")
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertIn("-force-d3d11-no-singlethreaded", (self.support / "args").read_text())
+
     def test_running_game_in_another_prefix_is_ignored(self):
         script = self.launcher(same_prefix=False)
         self.env["RUNNING_HEX"] = "0x1a"
