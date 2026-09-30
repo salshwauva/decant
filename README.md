@@ -9,7 +9,9 @@ The app finds installed games, launches them by Steam app ID, and shows engine s
 - Detects the installed Wine and DXMT engine and reports its status.
 - Lists owned Steam games and launches them by app ID.
 - Installs Steam inside a dedicated Wine bottle and tracks setup progress.
-- Re-icons and renames desktop shortcuts to match each game's Steam art.
+- Writes a launcher app for each installed game into `~/Applications/decant` and onto the Desktop, with the game's Steam icon. Opening one launches the game through Decant.
+- Waits for Steam to sign in before it sends a launch request, so a cold start does not drop it.
+- Refuses a second launch while a game runs and shows an alert instead.
 - Caps and trims crash dumps through a `--gc` command.
 - Logs to a single append-only file for diagnostics.
 
@@ -66,15 +68,19 @@ decant doctor
   script:  ok
 ```
 
-Other CLI flags on the same binary: `--self-test` runs the pure-logic checks with no Wine dependency, `--games` lists owned games, `--gc` reports and trims crash dumps, `--theme-icons` re-icons desktop shortcuts, `--play <app-id>` launches a game, `--log` prints the log path.
+Other CLI flags on the same binary: `--self-test` runs the pure-logic checks with no Wine dependency, `--games` lists owned games, `--gc` reports and trims crash dumps, `--theme-icons` writes the game launcher apps, `--play <app-id>` launches a game, `--log` prints the log path.
 
-Opening the app (`open build/decant.app`, or running the binary with no flags) re-icons every installed game's real desktop shortcut on appear. Use the CLI flags above to check state without touching the desktop.
+Opening the app (`open build/decant.app`, or running the binary with no flags) writes a launcher app for every installed game into `~/Applications/decant` and onto the Desktop. It also deletes Steam's own `.desktop` and `.url` shortcut for a game once both launchers exist. Use the CLI flags above to check state without touching the desktop.
 
 Logs live at `~/Library/Application Support/decant/logs/decant.log`.
 
 ## Compatibility
 
 The project records successful runs of Fields of Mistria, Kynseed, and Travellers Rest. These results do not establish compatibility with other games.
+
+Decant passes Unity's launch flags (`-force-d3d11-no-singlethreaded -screen-fullscreen 0`) only to Unity games, found by `UnityPlayer.dll` in the install folder. Fields of Mistria exits with code 2 when it gets them.
+
+Kynseed raises a .NET error dialog at startup because of a bug in the game. A small helper that runs in the bottle (`engine/helpers/dismiss-dialog`, built by `bundle.sh`) presses Continue on that one dialog.
 
 Games that require Windows kernel anti-cheat are outside the supported scope. Compatibility depends on the game and the Wine and DXMT versions in `engine/PINS.md`.
 
@@ -86,7 +92,7 @@ swift test
 python3 -B -m unittest discover -s Tests/EngineTests -v
 ```
 
-`swift test` runs 18 cases against temp fixtures: argument parsing, process handling, and engine readiness. It does not exercise the installed engine, graphics, or a real game launch. The Python suite runs 7 cases against the shell install scripts.
+`swift test` runs 23 cases against temp fixtures: argument parsing, process handling, engine readiness, and launcher files. It does not exercise the installed engine, graphics, or a real game launch. The Python suite runs 27 cases against the shell install and launch scripts.
 
 Both suites, plus a release build, `--self-test`, and `--doctor`, run together through:
 
@@ -105,7 +111,7 @@ Resources/        Fonts, icons, and animation frames
 docs/             Review guide and security and test plan
 ```
 
-`Sources/decant/DecantApp.swift` is the entry point and CLI flag dispatch. `ContentView.swift` renders the shelf. `Engine.swift` detects the Wine and DXMT stack. `SteamManager.swift` installs and drives Steam inside the bottle. `GameIconTheme.swift` re-icons desktop shortcuts. `SelfTest.swift` holds the pure-logic checks behind `--self-test`.
+`Sources/decant/DecantApp.swift` is the entry point and CLI flag dispatch. `ContentView.swift` renders the shelf. `Engine.swift` detects the Wine and DXMT stack. `SteamManager.swift` installs and drives Steam inside the bottle. `GameLaunchers.swift` writes the per-game launcher apps, and `GameIconTheme.swift` draws their icons. `SelfTest.swift` holds the pure-logic checks behind `--self-test`.
 
 `engine/install.sh` runs `engine/scripts/00` through `08` in order. `engine/PINS.md` records the exact pinned versions of Wine, DXMT, and their build tools.
 
