@@ -21,6 +21,14 @@ cp Resources/cellar-bg.jpg "$APP/Contents/Resources/cellar-bg.jpg"
 mkdir -p "$APP/Contents/Resources/pour"
 cp Resources/pour/*.png "$APP/Contents/Resources/pour/"
 
+# windows-side dialog helper; skipped when the mingw toolchain is missing
+MINGW="$(command -v x86_64-w64-mingw32-gcc || true)"
+if [ -n "$MINGW" ]; then
+  make -C engine/helpers/dismiss-dialog CC="$MINGW"
+else
+  echo "mingw-w64 not found: dialog helper not built (brew install mingw-w64)"
+fi
+
 # deploy launch wrapper + engine recipe so the .app works without the git tree
 ENGINE_DIR="${DECANT_HOME:-$HOME/Library/Application Support/decant}/engine"
 mkdir -p "$ENGINE_DIR"

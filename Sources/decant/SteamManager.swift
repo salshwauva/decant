@@ -87,7 +87,7 @@ enum SteamManager {
         !id.isEmpty && id.utf8.allSatisfy { $0 >= 48 && $0 <= 57 }
     }
 
-    private static func request(_ args: [String], bottle: URL, engine: Engine) throws {
+    private static func request(_ args: [String], bottle: URL, engine: Engine, timeout: TimeInterval = 120) throws {
         let script = try requireLaunchScript()
         var env = EngineManager.bottleEnv(bottle)
         env["WINE_BIN"] = engine.wine
@@ -95,7 +95,7 @@ enum SteamManager {
         env["WINESERVER_BIN"] = bin.appendingPathComponent("wineserver").path
         env["WINE_APP"] = bin.deletingLastPathComponent().deletingLastPathComponent()
             .deletingLastPathComponent().deletingLastPathComponent().path
-        let result = try EngineManager.run("/bin/bash", [script.path] + args, extraEnv: env)
+        let result = try EngineManager.run("/bin/bash", [script.path] + args, extraEnv: env, timeout: timeout)
         if !result.err.isEmpty { DecantLog.line(result.err) }
         // the script exits 3 with the running app id on stdout when a game
         // already runs in the bottle; nothing was started or stopped.
@@ -132,9 +132,11 @@ enum SteamManager {
             throw DecantError.launch("invalid steam app id: \(appID)")
         }
         let note = try clearDumpsIfBig(bottle)
-        try request(["play", appID], bottle: bottle, engine: engine)
+        // a cold start waits up to 150 s for steam to sign in and 60 s for the
+        // game process, so play gets more than the 120 s default.
+        try request(["play", appID], bottle: bottle, engine: engine, timeout: 300)
         DecantLog.line("game launch request sent appid=\(appID)")
-        return [note, "launch request sent to steam; game startup is not yet verified"].compactMap { $0 }.joined(separator: "; ")
+        return [note, "steam started the game"].compactMap { $0 }.joined(separator: "; ")
     }
 
     static func uninstallGame(appID: String, bottle: URL, engine: Engine) throws {
