@@ -206,6 +206,82 @@ play_game() {
         || { log "steam did not start app $1 within ${START_WAIT}s; see $LOG"; return 1; }
     log "steam started app $1"
     start_dialog_helper "$1"
+    ( bash "$0" watch "$1" >>"$LOG" 2>&1 </dev/null & )
+}
+
+# steam stays up after its game quits, and so do wineserver, winedevice and
+# steamservice, each with a dock icon labeled wine. watch ends them once the
+# game is over. it reads RunningAppID because steam's console log has no
+# "Game process removed" line for most sessions.
+GAME_POLL=10
+SEEN_WAIT=30
+IDLE_POLLS=2
+STOP_WAIT=30
+
+# ends steam, wineserver and anything else holding this bottle. steam gets the
+# chance to exit by itself (it syncs saves), then wineserver is killed, then
+# whatever is left, including leftovers from sessions whose wineserver is gone.
+# the caller has checked that no game runs.
+stop_bottle() {
+    local i pids
+    if prefix_steam_running; then
+        log "stopping steam in this bottle"
+        steam_exe -shutdown || true
+        for (( i = 0; i < STOP_WAIT; i++ )); do
+            prefix_steam_running || break
+            sleep 1
+        done
+    fi
+    "$WINESERVER_BIN" -k >>"$LOG" 2>&1 || true
+    pids=$(prefix_pids | grep -vx "$$" || true)
+    if [ -n "$pids" ]; then
+        # shellcheck disable=SC2086
+        kill $pids 2>/dev/null || true
+        sleep 3
+        pids=$(prefix_pids | grep -vx "$$" || true)
+        # shellcheck disable=SC2086
+        [ -z "$pids" ] || kill -9 $pids 2>/dev/null || true
+    fi
+    log "bottle stopped"
+}
+
+# polls until the game is over, then stops the bottle. over means no game in
+# RunningAppID and no play request in flight on two polls in a row. a game
+# that never shows up in the registry within SEEN_WAIT counts as over. if
+# steam is gone by itself the game may still run, so nothing is killed.
+watch_game() {
+    local seen=0 idle=0 waited=0 running
+    log "watching app $1 for exit"
+    while prefix_steam_running; do
+        running="$(prefix_running_appid)"
+        if [ -n "$running" ]; then
+            seen=1
+            idle=0
+        elif pgrep -f 'decant-launch\.sh play' >/dev/null 2>&1; then
+            idle=0
+        elif (( seen || waited >= SEEN_WAIT )); then
+            idle=$(( idle + 1 ))
+            if (( idle >= IDLE_POLLS )); then
+                log "app $1 is over"
+                stop_bottle
+                return 0
+            fi
+        fi
+        sleep "$GAME_POLL"
+        waited=$(( waited + GAME_POLL ))
+    done
+    log "steam exited by itself; leaving the bottle alone"
+}
+
+stop_idle_bottle() {
+    local running
+    running="$(prefix_running_appid)"
+    if [ -n "$running" ]; then
+        log "a game is running (app $running); not stopping the bottle"
+        echo "$running"
+        exit "$EXIT_GAME_RUNNING"
+    fi
+    stop_bottle
 }
 
 uninstall_game() {
@@ -217,7 +293,11 @@ case "${1:-}" in
     steam)     send_request ;;
     play)      [ -n "${2:-}" ] || { echo "usage: decant-launch.sh play <appid>" >&2; exit 2; }
                play_game "$2" ;;
+    watch)     [ -n "${2:-}" ] || { echo "usage: decant-launch.sh watch <appid>" >&2; exit 2; }
+               validate_appid "$2"
+               watch_game "$2" ;;
+    stop)      stop_idle_bottle ;;
     uninstall) [ -n "${2:-}" ] || { echo "usage: decant-launch.sh uninstall <appid>" >&2; exit 2; }
                uninstall_game "$2" ;;
-    *)         echo "usage: decant-launch.sh {steam|play <appid>|uninstall <appid>}" >&2; exit 2 ;;
+    *)         echo "usage: decant-launch.sh {steam|play <appid>|stop|uninstall <appid>}" >&2; exit 2 ;;
 esac

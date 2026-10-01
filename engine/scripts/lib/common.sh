@@ -149,6 +149,14 @@ prefix_steam_running() {
     return 1
 }
 
+# pids of every process whose working directory sits under this prefix: steam,
+# its webhelper, the game, and wine's winedevice and service hosts. wineserver
+# keeps its own working directory under /tmp, so it is not listed.
+prefix_pids() {
+    lsof -d cwd -Fpn 2>/dev/null | awk -v pre="n$WINEPREFIX/" \
+        '/^p/ { pid = substr($0, 2) } index($0, pre) == 1 { print pid }'
+}
+
 # app id of the game steam is running in this prefix, empty when none. steam
 # keeps it in the bottle registry as RunningAppID. skipped when no steam runs
 # here, so the query never starts a fresh wineserver.

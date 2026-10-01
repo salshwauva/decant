@@ -3,6 +3,7 @@ import hashlib
 from pathlib import Path
 import shlex
 import shutil
+import signal
 import subprocess
 import tempfile
 import time
@@ -18,6 +19,7 @@ SIGN_IN = (
     "[{t}] [Logged On, 4, 7] [U:1:424242] RecvMsgClientLogOnResponse() : processing complete\n"
 )
 CONNECTING = "[2026-09-28 20:06:40] [Connecting, 4, 0] [U:1:424242] PingWebSocketCM() starting...\n"
+WATCH_SPAWN = '( bash "$0" watch "$1" >>"$LOG" 2>&1 </dev/null & )'
 GAME_LINE = ('[{t}] Game process added : AppID {app} '
              '""C:\\Program Files (x86)\\Steam\\steamapps\\common\\Game\\Game.exe"", ProcID 896, IP 0.0.0.0:0\n')
 
@@ -41,7 +43,7 @@ class EngineScripts(unittest.TestCase):
         path.chmod(0o755)
 
     def launcher(self, same_prefix=True, wine_exit=0, last_state="Logged On",
-                 sign_in="start", game_app="123", rotate=False):
+                 sign_in="start", game_app="123", rotate=False, watch_spawn=":"):
         """checkout with fake wine, steam and logs.
 
         last_state: how the connection log ends before the run.
@@ -51,6 +53,9 @@ class EngineScripts(unittest.TestCase):
           None for no line.
         rotate: the late sign-in replaces the connection log instead of
           appending to it.
+        watch_spawn: what play runs where the real script starts the exit
+          watch in the background. nothing by default, so no test leaves a
+          watcher polling behind it.
         """
         script = self.checkout / "scripts/decant-launch.sh"
         script.parent.mkdir(parents=True)
@@ -58,6 +63,8 @@ class EngineScripts(unittest.TestCase):
         # short waits so the timeout cases finish quickly.
         short = text.replace("LOGON_WAIT=150", "LOGON_WAIT=6").replace("START_WAIT=60", "START_WAIT=6")
         self.assertNotEqual(short, text)
+        self.assertIn(WATCH_SPAWN, short)
+        short = short.replace(WATCH_SPAWN, watch_spawn)
         script.write_text(short)
         common = self.checkout / "engine/scripts/lib/common.sh"
         common.parent.mkdir(parents=True)
@@ -85,10 +92,18 @@ class EngineScripts(unittest.TestCase):
                 GAME_LINE.format(t="2026-09-28 20:07:00", app=game_app))
             game = f'cat "$DECANT_HOME/game.txt" >> {console}\n'
         wine = self.support / "engines/wine11/Wine Stable.app/Contents/Resources/wine/bin/wine"
+        # reg-seq, when present, holds one RunningAppID per line, read one per
+        # query; the last line repeats.
         self.executable(wine, 'if [ "$1" = reg ]; then\n'
-                        '  printf "    RunningAppID    REG_DWORD    %s\\r\\n" "${RUNNING_HEX:-0x0}"; exit 0\n'
+                        '  f="$DECANT_HOME/reg-seq"; hex="${RUNNING_HEX:-0x0}"\n'
+                        '  if [ -s "$f" ]; then\n'
+                        '    hex=$(head -1 "$f")\n'
+                        '    if [ "$(wc -l < "$f")" -gt 1 ]; then tail -n +2 "$f" > "$f.n"; mv "$f.n" "$f"; fi\n'
+                        '  fi\n'
+                        '  printf "    RunningAppID    REG_DWORD    %s\\r\\n" "$hex"; exit 0\n'
                         'fi\n'
                         'printf "%s\\n" "$@" > "$DECANT_HOME/args"\n'
+                        'if [ "$2" = -shutdown ]; then rm -f "$DECANT_HOME/steam-running"; fi\n'
                         'cat "$DECANT_HOME/sleeps" > "$DECANT_HOME/sleeps-at-request" 2>/dev/null || true\n'
                         + game
                         + f"exit {wine_exit}\n")
@@ -101,11 +116,33 @@ class EngineScripts(unittest.TestCase):
                         'n=$(cat "$DECANT_HOME/sleeps" 2>/dev/null || echo 0); n=$((n + 1))\n'
                         'echo "$n" > "$DECANT_HOME/sleeps"\n'
                         f'if [ "$n" = 3 ]; then\n{late}fi\n')
-        self.executable(self.bin / "pgrep", "echo 101\n")
+        # a play request in flight is a pgrep for decant-launch.sh; play-flights
+        # holds how many more polls see one.
+        self.executable(self.bin / "pgrep",
+                        'case "$*" in\n'
+                        '*decant-launch*)\n'
+                        '  n=$(cat "$DECANT_HOME/play-flights" 2>/dev/null || echo 0)\n'
+                        '  [ "$n" -gt 0 ] || exit 1\n'
+                        '  echo $((n - 1)) > "$DECANT_HOME/play-flights"; echo 202 ;;\n'
+                        '*) echo 101 ;;\n'
+                        'esac\n')
+        wineserver = self.support / "engines/wine11/Wine Stable.app/Contents/Resources/wine/bin/wineserver"
+        self.executable(wineserver, 'echo "$@" >> "$DECANT_HOME/wineserver"\n')
         # steam's working directory names its prefix; ps shows no environment.
         if same_prefix:
             (self.support / "steam-running").touch()
+        # the full listing (lsof -d cwd) shows the live pids named in
+        # leftover-pids under the prefix and those in outside-pids elsewhere.
         self.executable(self.bin / "lsof",
+                        'if [ "$1" = -d ]; then\n'
+                        '  for pid in $(cat "$DECANT_HOME/leftover-pids" 2>/dev/null); do\n'
+                        '    kill -0 "$pid" 2>/dev/null && printf "p%s\\nfcwd\\nn%s/drive_c/windows\\n" "$pid" "$WINEPREFIX"\n'
+                        '  done\n'
+                        '  for pid in $(cat "$DECANT_HOME/outside-pids" 2>/dev/null); do\n'
+                        '    kill -0 "$pid" 2>/dev/null && printf "p%s\\nfcwd\\nn/elsewhere\\n" "$pid"\n'
+                        '  done\n'
+                        '  exit 0\n'
+                        'fi\n'
                         'if [ -f "$DECANT_HOME/steam-running" ]; then\n'
                         'echo "n$WINEPREFIX/drive_c/Program Files (x86)/Steam"\n'
                         'else echo "n/elsewhere/drive_c/Program Files (x86)/Steam"; fi\n')
@@ -313,6 +350,113 @@ class EngineScripts(unittest.TestCase):
         self.assertNotEqual(result.returncode, 0)
         self.assertIn("exited 9", result.stderr)
         self.assertIn("did not start app 123", result.stderr)
+
+    def spawn_sleeper(self):
+        proc = subprocess.Popen(["/bin/sleep", "60"])
+        self.addCleanup(lambda: (proc.kill(), proc.wait()))
+        return proc
+
+    def reg_sequence(self, *hexes):
+        (self.support / "reg-seq").write_text("".join(h + "\n" for h in hexes))
+
+    def wineserver_calls(self):
+        calls = self.support / "wineserver"
+        return calls.read_text() if calls.exists() else ""
+
+    def test_stop_ends_steam_wineserver_and_what_is_left(self):
+        script = self.launcher()
+        inside, outside = self.spawn_sleeper(), self.spawn_sleeper()
+        (self.support / "leftover-pids").write_text(f"{inside.pid}\n")
+        (self.support / "outside-pids").write_text(f"{outside.pid}\n")
+        result = self.run_launcher(script, "stop")
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertIn("-shutdown", (self.support / "args").read_text())
+        self.assertEqual(self.wineserver_calls(), "-k\n")
+        self.assertEqual(inside.wait(timeout=5), -signal.SIGTERM)
+        self.assertIsNone(outside.poll())
+
+    def test_stop_sweeps_leftovers_when_steam_is_already_gone(self):
+        # the orphan case: winedevice and steamservice outlive their wineserver.
+        script = self.launcher(same_prefix=False)
+        inside = self.spawn_sleeper()
+        (self.support / "leftover-pids").write_text(f"{inside.pid}\n")
+        result = self.run_launcher(script, "stop")
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertFalse((self.support / "args").exists())
+        self.assertEqual(inside.wait(timeout=5), -signal.SIGTERM)
+
+    def test_stop_leaves_a_running_game_alone(self):
+        script = self.launcher()
+        inside = self.spawn_sleeper()
+        (self.support / "leftover-pids").write_text(f"{inside.pid}\n")
+        self.env["RUNNING_HEX"] = "0x7b"
+        result = self.run_launcher(script, "stop")
+        self.assertEqual(result.returncode, 3, result.stderr)
+        self.assertEqual(result.stdout.strip(), "123")
+        self.assertFalse((self.support / "args").exists())
+        self.assertEqual(self.wineserver_calls(), "")
+        self.assertIsNone(inside.poll())
+
+    def test_watch_stops_the_bottle_when_the_game_is_over(self):
+        script = self.launcher()
+        self.reg_sequence("0x7b", "0x7b", "0x0")
+        result = self.run_launcher(script, "watch", "123")
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertIn("app 123 is over", result.stderr)
+        self.assertIn("-shutdown", (self.support / "args").read_text())
+        self.assertEqual(self.wineserver_calls(), "-k\n")
+        # two polls with the game, then two without: the stop comes on the fourth.
+        self.assertEqual(self.sleeps(), 3)
+
+    def test_watch_does_not_stop_on_a_one_poll_gap(self):
+        script = self.launcher()
+        self.reg_sequence("0x7b", "0x0", "0x7b", "0x7b", "0x0")
+        result = self.run_launcher(script, "watch", "123")
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertEqual(self.sleeps(), 5)
+        self.assertEqual(self.wineserver_calls(), "-k\n")
+
+    def test_watch_waits_while_a_play_request_is_in_flight(self):
+        script = self.launcher()
+        self.reg_sequence("0x7b", "0x0")
+        (self.support / "play-flights").write_text("3\n")
+        result = self.run_launcher(script, "watch", "123")
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertEqual(self.sleeps(), 5)
+
+    def test_watch_gives_up_on_a_game_that_never_registers(self):
+        script = self.launcher()
+        result = self.run_launcher(script, "watch", "123")
+        self.assertEqual(result.returncode, 0, result.stderr)
+        # SEEN_WAIT is 30 s of 10 s polls, then two polls with nothing.
+        self.assertEqual(self.sleeps(), 4)
+        self.assertEqual(self.wineserver_calls(), "-k\n")
+
+    def test_watch_does_nothing_once_steam_has_exited_by_itself(self):
+        script = self.launcher(same_prefix=False)
+        result = self.run_launcher(script, "watch", "123")
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertIn("leaving the bottle alone", result.stderr)
+        self.assertFalse((self.support / "args").exists())
+        self.assertEqual(self.wineserver_calls(), "")
+
+    def test_watch_rejects_a_bad_app_id(self):
+        script = self.launcher()
+        result = self.run_launcher(script, "watch", "12x")
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn("invalid steam app id", result.stderr)
+
+    def test_play_starts_the_exit_watch(self):
+        script = self.launcher(watch_spawn='echo "watch $1" > "$DECANT_HOME/watch"')
+        result = self.run_launcher(script, "play", "123")
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertEqual((self.support / "watch").read_text(), "watch 123\n")
+
+    def test_running_game_does_not_start_an_exit_watch(self):
+        script = self.launcher(watch_spawn='echo "watch $1" > "$DECANT_HOME/watch"')
+        self.env["RUNNING_HEX"] = "0x1a"
+        self.run_launcher(script, "play", "123")
+        self.assertFalse((self.support / "watch").exists())
 
     def test_uninstall_request_failure_is_nonzero(self):
         script = self.launcher(wine_exit=9)
