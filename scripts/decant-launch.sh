@@ -284,6 +284,11 @@ stop_idle_bottle() {
     stop_bottle
 }
 
+install_game() {
+    validate_appid "$1"
+    send_request "steam://install/$1"
+}
+
 uninstall_game() {
     validate_appid "$1"
     send_request "steam://uninstall/$1"
@@ -297,7 +302,9 @@ case "${1:-}" in
                validate_appid "$2"
                watch_game "$2" ;;
     stop)      stop_idle_bottle ;;
+    install)   [ -n "${2:-}" ] || { echo "usage: decant-launch.sh install <appid>" >&2; exit 2; }
+               install_game "$2" ;;
     uninstall) [ -n "${2:-}" ] || { echo "usage: decant-launch.sh uninstall <appid>" >&2; exit 2; }
                uninstall_game "$2" ;;
-    *)         echo "usage: decant-launch.sh {steam|play <appid>|stop|uninstall <appid>}" >&2; exit 2 ;;
+    *)         echo "usage: decant-launch.sh {steam|play <appid>|stop|install <appid>|uninstall <appid>}" >&2; exit 2 ;;
 esac

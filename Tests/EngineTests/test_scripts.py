@@ -458,6 +458,18 @@ class EngineScripts(unittest.TestCase):
         self.run_launcher(script, "play", "123")
         self.assertFalse((self.support / "watch").exists())
 
+    def test_install_request_failure_is_nonzero(self):
+        script = self.launcher(wine_exit=9)
+        result = self.run_launcher(script, "install", "123")
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn("request failed", result.stderr)
+
+    def test_install_sends_the_install_url(self):
+        script = self.launcher()
+        result = self.run_launcher(script, "install", "123")
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertIn("steam://install/123", (self.support / "args").read_text())
+
     def test_uninstall_request_failure_is_nonzero(self):
         script = self.launcher(wine_exit=9)
         result = self.run_launcher(script, "uninstall", "123")
